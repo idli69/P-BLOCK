@@ -11,12 +11,9 @@ class AccountabilityManager(
     private val secureKeyManager: SecureKeyManager,
     private val blocklistLoader: BlocklistLoader
 ) {
-    /**
-     * Derives a stable Firebase topic ID from the plain-text partner code.
-     * Must be done BEFORE encryption so both devices compute the same value.
-     */
     fun deriveTopicId(plainCode: String): String {
-        return "pblock_${abs(plainCode.hashCode())}"
+        val cleanCode = plainCode.replace("-", "").uppercase()
+        return "pblock_$cleanCode"
     }
 
     suspend fun generateAndSetPartnerCode(code: String) {

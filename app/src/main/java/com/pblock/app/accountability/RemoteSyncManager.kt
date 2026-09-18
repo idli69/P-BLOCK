@@ -60,6 +60,10 @@ class RemoteSyncManager(
         val blockedRef = db.getReference("users/$topicId/blocked_count")
         val tokenRef   = db.getReference("users/$topicId/device_token")
 
+        val topAllowedRef = db.getReference("users/$topicId/top_allowed")
+        val topBlockedRef = db.getReference("users/$topicId/top_blocked")
+        val customBlocksRef = db.getReference("users/$topicId/custom_blocks")
+
         Log.i(TAG, "Firebase connected at users/$topicId")
 
         // 1. Upload FCM push token so partner dashboard can notify this device
@@ -77,6 +81,8 @@ class RemoteSyncManager(
                 try {
                     activeRef.setValue(System.currentTimeMillis())
                     blockedRef.setValue(prefs.blockedQueries.first())
+                    topAllowedRef.setValue(com.pblock.app.domain.StatsTracker.getTopAllowed())
+                    topBlockedRef.setValue(com.pblock.app.domain.StatsTracker.getTopBlocked())
                 } catch (e: Exception) {
                     Log.e(TAG, "Heartbeat failed", e)
                 }
@@ -113,6 +119,26 @@ class RemoteSyncManager(
 
             override fun onCancelled(error: DatabaseError) {
                 Log.e(TAG, "Firebase listener cancelled: ${error.message}")
+            }
+        })
+
+        // 4. Listen for custom blocks from partner dashboard
+        customBlocksRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val customBlocks = mutableListOf<String>()
+                for (child in snapshot.children) {
+                    val domain = child.key
+                    val isBlocked = child.getValue(Boolean::class.java) ?: false
+                    if (domain != null && isBlocked) {
+                        customBlocks.add(domain.replace("_", ".")) // Firebase keys can't have '.', dashboard replaces them with '_'
+                    }
+                }
+                com.pblock.app.vpn.BlockingVpnService.activeFilterEngine?.setCustomBlocks(customBlocks)
+                Log.i(TAG, "Loaded ${customBlocks.size} custom blocks from Firebase")
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(TAG, "Custom blocks listener cancelled", error.toException())
             }
         })
     }

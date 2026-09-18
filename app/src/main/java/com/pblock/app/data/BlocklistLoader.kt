@@ -131,23 +131,43 @@ class BlocklistLoader(private val context: Context) {
 
         val newDomains = mutableListOf<String>()
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                Log.i(TAG, "Downloading OTA blocklist from StevenBlack...")
-                val connection = URL(OTA_URL).openConnection()
-                connection.connectTimeout = 15_000
-                connection.readTimeout = 30_000
+            val sources = listOf(
+                "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts",
+                "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/porn.txt"
+            )
 
-                InputStreamReader(connection.getInputStream()).buffered().use { reader ->
-                    reader.lineSequence().forEach { line ->
-                        if (line.startsWith("0.0.0.0 ")) {
-                            val domain = line.substring(8).trim().split("#")[0].trim()
-                            if (domain.isNotEmpty() && domain != "0.0.0.0") {
-                                newDomains.add(domain)
+            sources.forEach { sourceUrl ->
+                try {
+                    val url = URL(sourceUrl)
+                    val connection = url.openConnection()
+                    connection.connectTimeout = 15_000
+                    connection.readTimeout = 30_000
+
+                    InputStreamReader(connection.getInputStream()).buffered().use { reader ->
+                        reader.lineSequence().forEach { line ->
+                            val trimmed = line.trim()
+                            if (trimmed.startsWith("#") || trimmed.isEmpty()) return@forEach
+
+                            // Handle StevenBlack format (0.0.0.0 domain)
+                            if (trimmed.startsWith("0.0.0.0 ")) {
+                                val domain = trimmed.substring(8).trim().split("#")[0].trim()
+                                if (domain.isNotEmpty() && domain != "0.0.0.0") {
+                                    newDomains.add(domain)
+                                }
+                            } 
+                            // Handle Hagezi format (just domain)
+                            else if (!trimmed.contains(" ") && !trimmed.contains("#")) {
+                                newDomains.add(trimmed)
                             }
                         }
                     }
+                    Log.i(TAG, "Downloaded from $sourceUrl")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to download OTA blocklist from $sourceUrl", e)
                 }
+            }
 
+            try {
                 // Save to cache
                 val cacheFile = File(context.filesDir, CACHE_FILE)
                 cacheFile.writeText(newDomains.joinToString("\n"))

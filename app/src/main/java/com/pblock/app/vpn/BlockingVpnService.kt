@@ -26,6 +26,9 @@ class BlockingVpnService : VpnService() {
     companion object {
         private const val TAG = "BlockingVpnService"
         const val UPSTREAM_DNS = "8.8.8.8"
+        
+        @Volatile
+        var activeFilterEngine: FilterEngine? = null
     }
 
     private var vpnInterface: ParcelFileDescriptor? = null
@@ -39,13 +42,14 @@ class BlockingVpnService : VpnService() {
         super.onCreate()
         prefs = PreferencesManager(this)
         blocklistLoader = BlocklistLoader(this)
-        filterEngine = FilterEngine()
 
-        // Load sample blocklist immediately so the VPN works right away
-        blocklistLoader.loadSampleBlocklist().also {
-            filterEngine.loadBlocklist(it.domains)
-            filterEngine.loadKeywords(it.keywords)
+        // Load sample blocklist immediately
+        filterEngine = FilterEngine().apply {
+            val data = blocklistLoader.loadSampleBlocklist()
+            loadBlocklist(data.domains)
+            loadKeywords(data.keywords)
         }
+        activeFilterEngine = filterEngine
 
         // Try loading cached OTA list synchronously (file read — fast, no network)
         val cached = blocklistLoader.loadCachedBlocklist()
@@ -168,6 +172,7 @@ class BlockingVpnService : VpnService() {
         
         val isBlocked = filterEngine.shouldBlock(hostname)
         prefs.incrementQueries(isBlocked)
+        com.pblock.app.domain.StatsTracker.recordQuery(hostname, isBlocked)
         
         if (isBlocked) {
             Log.d(TAG, "Blocked: $hostname")
@@ -318,6 +323,7 @@ class BlockingVpnService : VpnService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        activeFilterEngine = null
         serviceScope.cancel()
         vpnInterface?.close()
         vpnInterface = null

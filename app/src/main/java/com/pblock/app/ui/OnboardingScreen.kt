@@ -19,8 +19,10 @@ fun OnboardingScreen(
     var generatedCode by remember { mutableStateOf("") }
     
     LaunchedEffect(Unit) {
-        val code = String.format("%08d", Random.nextInt(100000000))
-        generatedCode = code
+        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Removed confusing chars: I, 1, O, 0
+        val code = (1..6).map { chars.random() }.joinToString("")
+        val formattedCode = "${code.substring(0,3)}-${code.substring(3,6)}"
+        generatedCode = formattedCode
     }
 
     Column(
@@ -31,7 +33,7 @@ fun OnboardingScreen(
     ) {
         Text("Welcome to P-BLOCK", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Share this 8-digit recovery code with your accountability partner. You will need it to unlock the app instantly.")
+        Text("Share this 6-character code with your accountability partner. You will need it to unlock the app instantly.")
         Spacer(modifier = Modifier.height(24.dp))
         
         Surface(

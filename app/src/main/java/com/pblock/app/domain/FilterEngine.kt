@@ -14,10 +14,16 @@ class FilterEngine {
     private val blocklist = HashSet<String>(500_000)
     private val allowlist = HashSet<String>(100)
     private val keywords = HashSet<String>(200)
+    private val customBlocklist = HashSet<String>(100)
 
     fun loadBlocklist(domains: List<String>) {
         blocklist.clear()
         domains.mapTo(blocklist) { it.lowercase().trim() }
+    }
+
+    fun setCustomBlocks(domains: List<String>) {
+        customBlocklist.clear()
+        domains.mapTo(customBlocklist) { it.lowercase().trim() }
     }
 
     fun addToBlocklist(domain: String) {
@@ -43,9 +49,10 @@ class FilterEngine {
      *
      * Logic:
      * 1. Allowlist — exact or any parent domain match → ALLOW
-     * 2. Blocklist — exact or any parent domain match → BLOCK
-     * 3. Keywords — substring in hostname → BLOCK
-     * 4. Default → ALLOW
+     * 2. Custom Blocklist — exact or any parent domain match → BLOCK
+     * 3. Blocklist — exact or any parent domain match → BLOCK
+     * 4. Keywords — substring in hostname → BLOCK
+     * 5. Default → ALLOW
      */
     fun shouldBlock(hostname: String): Boolean {
         val query = hostname.lowercase().trim()
@@ -53,13 +60,16 @@ class FilterEngine {
         // 1. Allowlist check (exact + suffix)
         if (matchesDomainList(query, allowlist)) return false
 
-        // 2. Blocklist check (exact + suffix)
+        // 2. Custom Blocklist check (exact + suffix)
+        if (matchesDomainList(query, customBlocklist)) return true
+
+        // 3. Blocklist check (exact + suffix)
         if (matchesDomainList(query, blocklist)) return true
 
-        // 3. Keyword substring check
+        // 4. Keyword substring check
         if (keywords.any { query.contains(it) }) return true
 
-        // 4. Default allow
+        // 5. Default allow
         return false
     }
 
