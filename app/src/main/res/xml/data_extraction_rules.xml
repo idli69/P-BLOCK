@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-network>
+        <exclude domain="sharedpref" fqdn="*"/>
+        <exclude domain="file" fqdn="*"/>
+    </cloud-network>
+</data-extraction-rules>
