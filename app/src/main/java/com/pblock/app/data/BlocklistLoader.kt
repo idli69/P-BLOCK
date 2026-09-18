@@ -2,6 +2,11 @@ package com.pblock.app.data
 
 import android.content.Context
 import android.util.Log
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.remoteconfig.ktx.remoteConfig
+import com.google.firebase.remoteconfig.ktx.remoteConfigSettings
+import kotlinx.coroutines.tasks.await
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStreamReader
@@ -41,6 +46,51 @@ class BlocklistLoader(private val context: Context) {
             Log.e(TAG, "Failed to load sample blocklist", e)
         }
         return BlocklistData(domains, keywords)
+    }
+
+    /**
+     * Fetches extra blocked domains and keywords from Firebase Remote Config.
+     * This allows adding new blocks instantly from the Firebase Console
+     * without needing an app update.
+     *
+     * Setup in Firebase Console → Remote Config:
+     *   - Parameter key: `blocked_keywords`  Value: ["gambling","betting","casino"]
+     *   - Parameter key: `blocked_domains`   Value: ["example-bad-site.com","other.com"]
+     *
+     * Returns empty BlocklistData if fetch fails (graceful degradation).
+     */
+    suspend fun fetchRemoteConfigBlocklist(): BlocklistData {
+        val extraDomains = mutableListOf<String>()
+        val extraKeywords = mutableListOf<String>()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val config = Firebase.remoteConfig
+                config.setConfigSettingsAsync(remoteConfigSettings {
+                    minimumFetchIntervalInSeconds = 3600 // fetch at most once per hour
+                }).await()
+                // Set safe defaults (empty — everything else from local list)
+                config.setDefaultsAsync(mapOf(
+                    "blocked_keywords" to "[]",
+                    "blocked_domains"  to "[]"
+                )).await()
+
+                config.fetchAndActivate().await()
+
+                val kwJson = config.getString("blocked_keywords")
+                val dmJson = config.getString("blocked_domains")
+
+                JSONArray(kwJson).let { arr ->
+                    for (i in 0 until arr.length()) extraKeywords.add(arr.getString(i))
+                }
+                JSONArray(dmJson).let { arr ->
+                    for (i in 0 until arr.length()) extraDomains.add(arr.getString(i))
+                }
+                Log.i(TAG, "Remote Config: +${extraKeywords.size} keywords, +${extraDomains.size} domains")
+            } catch (e: Exception) {
+                Log.e(TAG, "Remote Config fetch failed", e)
+            }
+        }
+        return BlocklistData(extraDomains, extraKeywords)
     }
 
     /**

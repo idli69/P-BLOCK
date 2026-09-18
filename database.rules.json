@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "users": {
+      "$topicId": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}

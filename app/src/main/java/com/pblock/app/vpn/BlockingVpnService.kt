@@ -54,7 +54,7 @@ class BlockingVpnService : VpnService() {
             Log.i(TAG, "Loaded ${cached.size} domains from cache immediately")
         }
 
-        // Schedule download refresh in background if cache was empty or stale
+        // Schedule OTA + Remote Config downloads in background
         if (cached.isEmpty()) {
             serviceScope.launch {
                 val otaDomains = blocklistLoader.downloadOisdBlocklist()
@@ -62,6 +62,19 @@ class BlockingVpnService : VpnService() {
                     filterEngine.loadBlocklist(otaDomains)
                     Log.i(TAG, "Hot-swapped blocklist with ${otaDomains.size} OTA domains")
                 }
+            }
+        }
+
+        // Always fetch Remote Config extras (lightweight, cached by Firebase SDK)
+        serviceScope.launch {
+            val remoteData = blocklistLoader.fetchRemoteConfigBlocklist()
+            if (remoteData.domains.isNotEmpty()) {
+                remoteData.domains.forEach { filterEngine.addToBlocklist(it) }
+                Log.i(TAG, "Added ${remoteData.domains.size} Remote Config domains")
+            }
+            if (remoteData.keywords.isNotEmpty()) {
+                filterEngine.loadKeywords(remoteData.keywords)
+                Log.i(TAG, "Added ${remoteData.keywords.size} Remote Config keywords")
             }
         }
 

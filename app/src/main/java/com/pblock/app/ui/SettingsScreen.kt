@@ -148,6 +148,24 @@ fun SettingsScreen(
                     }
                 }
             }
+            
+            // Crashlytics Test Section
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Developer Tools", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { throw RuntimeException("Test Crash for Firebase Crashlytics") },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Force Crash (Test Crashlytics)")
+                        }
+                    }
+                }
+            }
         }
     }
 }

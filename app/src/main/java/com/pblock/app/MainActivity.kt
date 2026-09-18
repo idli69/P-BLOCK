@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
         secureKeyManager = SecureKeyManager()
         blocklistLoader = BlocklistLoader(this)
         accountabilityManager = AccountabilityManager(prefs, secureKeyManager, blocklistLoader)
-        remoteSyncManager = RemoteSyncManager(prefs, accountabilityManager)
+        remoteSyncManager = RemoteSyncManager(this, prefs, accountabilityManager)
 
         // Start Firebase listener immediately — it will attach as soon as a topicId exists
         remoteSyncManager.start()
