@@ -51,6 +51,16 @@ class AccountabilityManager(
         blocklistLoader.logEvent("Protection disabled via remote Firebase unlock")
     }
 
+    /**
+     * Firebase-triggered remote lock from the accountability partner.
+     * Keeps the device protected until the partner unlocks it.
+     */
+    suspend fun remoteLock() {
+        prefs.setProtected(true)   // does not reset the streak
+        prefs.clearEmergencyUnlock()
+        blocklistLoader.logEvent("Protection enabled via remote Firebase lock")
+    }
+
     suspend fun requestEmergencyUnlock() {
         val currentStart = prefs.emergencyUnlockStart.first()
         if (currentStart == 0L) {

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.pblock.app.state.PBlockState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -22,6 +23,8 @@ class PreferencesManager(private val context: Context) {
         val PICKUPS_COUNT = intPreferencesKey("pickups_count")
         val PICKUPS_LAST_DATE = longPreferencesKey("pickups_last_date")
         val VPN_STATUS = stringPreferencesKey("vpn_status")
+        val APP_STATE = stringPreferencesKey("app_state")
+        val BATTERY_EXEMPTION_GRANTED = booleanPreferencesKey("battery_exemption_granted")
 
         const val VPN_STATUS_RUNNING = "RUNNING"
         const val VPN_STATUS_FAILED = "FAILED"
@@ -37,9 +40,23 @@ class PreferencesManager(private val context: Context) {
     val blockedQueries: Flow<Long> = context.dataStore.data.map { it[BLOCKED_QUERIES] ?: 0L }
     val streakStartDate: Flow<Long> = context.dataStore.data.map { it[STREAK_START_DATE] ?: 0L }
     val vpnStatus: Flow<String> = context.dataStore.data.map { it[VPN_STATUS] ?: VPN_STATUS_NOT_RUNNING }
+    val appState: Flow<PBlockState> = context.dataStore.data.map {
+        it[APP_STATE]?.let { name -> PBlockState.entries.firstOrNull { s -> s.name == name } }
+            ?: PBlockState.SETUP_INCOMPLETE
+    }
+    val batteryExemptionGranted: Flow<Boolean> =
+        context.dataStore.data.map { it[BATTERY_EXEMPTION_GRANTED] ?: false }
 
     suspend fun setVpnStatus(status: String) {
         context.dataStore.edit { it[VPN_STATUS] = status }
+    }
+
+    suspend fun setAppState(state: PBlockState) {
+        context.dataStore.edit { it[APP_STATE] = state.name }
+    }
+
+    suspend fun setBatteryExemptionGranted(granted: Boolean) {
+        context.dataStore.edit { it[BATTERY_EXEMPTION_GRANTED] = granted }
     }
 
     suspend fun incrementQueries(blocked: Boolean) {
