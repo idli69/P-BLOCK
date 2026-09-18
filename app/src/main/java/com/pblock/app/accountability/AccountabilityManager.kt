@@ -3,38 +3,68 @@ package com.pblock.app.accountability
 import com.pblock.app.data.PreferencesManager
 import com.pblock.app.data.SecureKeyManager
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import com.pblock.app.data.BlocklistLoader
-import kotlin.math.abs
+import com.google.firebase.database.ktx.database
+import com.google.firebase.ktx.Firebase
 
 class AccountabilityManager(
     private val prefs: PreferencesManager,
     private val secureKeyManager: SecureKeyManager,
-    private val blocklistLoader: BlocklistLoader
+    private val blocklistLoader: BlocklistLoader,
+    private val authManager: AuthManager
 ) {
-    fun deriveTopicId(plainCode: String): String {
-        val cleanCode = plainCode.replace("-", "").uppercase()
-        return "pblock_$cleanCode"
-    }
-
-    suspend fun generateAndSetPartnerCode(code: String) {
-        val encrypted = secureKeyManager.encryptPartnerCode(code)
-        val topicId = deriveTopicId(code)
-        prefs.setPartnerCode(encrypted, topicId)  // stores both encrypted code AND stable topicId
-        prefs.setProtected(true)
-        blocklistLoader.logEvent("Protection enabled with partner code. Topic: $topicId")
+    suspend fun generateAndSetPartnerCode(pairingCode: String, offlinePin: String, onPaired: suspend () -> Unit) {
+        val encryptedPin = secureKeyManager.encryptPartnerCode(offlinePin)
+        
+        // Write to pending_codes and listen for claim
+        val uid = authManager.deviceUid.value
+        if (uid != null) {
+            val db = com.google.firebase.ktx.Firebase.database("https://p-block-69-default-rtdb.firebaseio.com")
+            val pendingRef = db.getReference("pending_codes/${pairingCode.replace("-", "")}")
+            val codeData = mapOf(
+                "device_uid" to uid,
+                "expires_at" to System.currentTimeMillis() + 10 * 60 * 1000L,
+                "device_name" to android.os.Build.MODEL
+            )
+            pendingRef.setValue(codeData)
+            
+            // Listen for admin claim
+            pendingRef.child("claimed_by").addValueEventListener(object : com.google.firebase.database.ValueEventListener {
+                override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                    val adminUid = snapshot.getValue(String::class.java)
+                    if (adminUid != null) {
+                        // Admin claimed it! Add admin to devices/$uid/admins
+                        db.getReference("devices/$uid/admins/$adminUid").setValue(true)
+                        // Also link device in admin's node
+                        db.getReference("admins/$adminUid/devices/$uid").setValue(mapOf("name" to android.os.Build.MODEL))
+                        // Delete pending code
+                        pendingRef.removeValue()
+                        // Proceed to active protection
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            prefs.setOfflinePin(encryptedPin)
+                            prefs.setProtected(true)
+                            blocklistLoader.logEvent("Protection enabled with admin: $adminUid")
+                            onPaired()
+                        }
+                    }
+                }
+                override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+            })
+        }
     }
 
     /**
-     * Verifies partner code and unlocks. This is a user-initiated unlock
+     * Verifies offline PIN and unlocks. This is a user-initiated unlock
      * so it RESETS the streak (resetStreak = true).
      */
-    suspend fun verifyAndUnlock(inputCode: String): Boolean {
-        val encryptedCode = prefs.partnerCodeEncrypted.first() ?: return false
+    suspend fun verifyAndUnlock(inputPin: String): Boolean {
+        val encryptedPin = prefs.offlinePinEncrypted.first() ?: return false
 
-        if (secureKeyManager.verifyPartnerCode(encryptedCode, inputCode)) {
+        if (secureKeyManager.verifyPartnerCode(encryptedPin, inputPin)) {
             prefs.setProtected(false, resetStreak = true)
             prefs.clearEmergencyUnlock()
-            blocklistLoader.logEvent("Protection unlocked via partner code")
+            blocklistLoader.logEvent("Protection unlocked via offline PIN")
             return true
         }
         blocklistLoader.logEvent("Failed unlock attempt")
@@ -67,22 +97,6 @@ class AccountabilityManager(
             prefs.startEmergencyUnlock(System.currentTimeMillis())
             blocklistLoader.logEvent("Emergency unlock cooldown started")
         }
-    }
-
-    suspend fun checkEmergencyUnlockStatus(): Boolean {
-        val startTime = prefs.emergencyUnlockStart.first()
-        if (startTime == 0L) return false
-
-        val duration = prefs.cooldownDuration.first()
-        val elapsed = System.currentTimeMillis() - startTime
-        if (elapsed >= duration) {
-            // Emergency cooldown expired — this IS a user-initiated "give up" so streak resets
-            prefs.setProtected(false, resetStreak = true)
-            prefs.clearEmergencyUnlock()
-            blocklistLoader.logEvent("Emergency unlock cooldown expired — protection disabled")
-            return true
-        }
-        return false
     }
 
     suspend fun getRemainingCooldownMs(): Long {

@@ -10,6 +10,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.database.ktx.database
+import com.google.firebase.ktx.Firebase
 
 /**
  * Restarts the VPN service automatically after device reboot, as long as
@@ -29,6 +32,9 @@ class BootReceiver : BroadcastReceiver() {
             val prefs = PreferencesManager(context)
             val isProtected = prefs.isProtected.first()
             if (isProtected) {
+                // Log reboot tamper event
+                recordTamperEvent("Device was rebooted while protection was active")
+
                 // Only start if the user has already granted VPN permission
                 val vpnIntent = VpnService.prepare(context)
                 if (vpnIntent == null) {
@@ -45,5 +51,19 @@ class BootReceiver : BroadcastReceiver() {
                 }
             }
         }
+    }
+
+    private fun recordTamperEvent(actionType: String) {
+        val uid = Firebase.auth.currentUser?.uid ?: return
+        val db = Firebase.database("https://p-block-69-default-rtdb.firebaseio.com")
+        val feedRef = db.getReference("devices/$uid/activity_feed")
+        
+        val event = mapOf(
+            "type" to "TAMPER",
+            "action" to actionType,
+            "device_name" to android.os.Build.MODEL,
+            "timestamp" to System.currentTimeMillis()
+        )
+        feedRef.push().setValue(event)
     }
 }

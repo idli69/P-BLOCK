@@ -8,10 +8,16 @@ import androidx.compose.ui.unit.dp
 import com.pblock.app.accountability.AccountabilityManager
 import kotlinx.coroutines.launch
 
+import com.pblock.app.state.AppStateController
+import com.pblock.app.state.StateEvent
+
 @Composable
 fun UnlockScreen(
     accountabilityManager: AccountabilityManager,
-    onUnlockSuccess: () -> Unit
+    appStateController: AppStateController,
+    remoteSyncManager: com.pblock.app.accountability.RemoteSyncManager,
+    onUnlockSuccess: () -> Unit,
+    onNavigateBack: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     var inputCode by remember { mutableStateOf("") }
@@ -75,8 +81,11 @@ fun UnlockScreen(
                     TextButton(onClick = {
                         coroutineScope.launch {
                             accountabilityManager.requestEmergencyUnlock()
+                            remoteSyncManager.notifyPartnerEmergencyRequest()
+                            appStateController.applyEvent(StateEvent.CooldownStarted)
                         }
                         showEmergencyConfirm = false
+                        onNavigateBack()
                     }) {
                         Text("Start Timer")
                     }

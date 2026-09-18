@@ -6,6 +6,9 @@ import android.net.Uri
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.database.ktx.database
+import com.google.firebase.ktx.Firebase
 
 class PBlockAccessibilityService : AccessibilityService() {
     
@@ -34,17 +37,27 @@ class PBlockAccessibilityService : AccessibilityService() {
                              textOnScreen.contains("disconnect")
 
         if (mentionsAppOrVpn && mentionsDanger) {
-            Log.w(TAG, "Anti-tamper triggered! Redirecting to YouTube Music.")
-            performGlobalAction(GLOBAL_ACTION_HOME)
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            }
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to launch redirect intent", e)
-            }
+            Log.w(TAG, "Anti-tamper triggered!")
+            recordTamperEvent("Attempted uninstall or force stop in Settings")
+            
+            // Note: We don't have access to AppStateController here easily without DI,
+            // but we can update a shared preference or emit an event.
+            // For now, writing to the RTDB activity feed fulfills the spec.
         }
+    }
+
+    private fun recordTamperEvent(actionType: String) {
+        val uid = com.google.firebase.ktx.Firebase.auth.currentUser?.uid ?: return
+        val db = com.google.firebase.ktx.Firebase.database("https://p-block-69-default-rtdb.firebaseio.com")
+        val feedRef = db.getReference("devices/$uid/activity_feed")
+        
+        val event = mapOf(
+            "type" to "TAMPER",
+            "action" to actionType,
+            "device_name" to android.os.Build.MODEL,
+            "timestamp" to System.currentTimeMillis()
+        )
+        feedRef.push().setValue(event)
     }
 
     private fun extractAllText(node: AccessibilityNodeInfo?): String {

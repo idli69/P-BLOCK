@@ -48,6 +48,13 @@ class RemoteSyncManager(
     private val CHANNEL_ID = "pblock_alerts"
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    enum class SyncStatus { OFFLINE, SYNCING, SYNCED }
+    private val _syncStatus = kotlinx.coroutines.flow.MutableStateFlow(SyncStatus.OFFLINE)
+    val syncStatus: kotlinx.coroutines.flow.StateFlow<SyncStatus> = _syncStatus
+
+    private val _lastSyncTime = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    val lastSyncTime: kotlinx.coroutines.flow.StateFlow<Long> = _lastSyncTime
+
     fun start() {
         scope.launch {
             setupFirebase()
@@ -100,7 +107,10 @@ class RemoteSyncManager(
         scope.launch {
             while (true) {
                 try {
-                    activeRef.setValue(System.currentTimeMillis())
+                    _syncStatus.value = SyncStatus.SYNCING
+                    prefs.flushPendingQueries()
+                    
+                    activeRef.setValue(System.currentTimeMillis()).await()
                     blockedRef.setValue(prefs.blockedQueries.first())
                     topAllowedRef.setValue(com.pblock.app.domain.StatsTracker.getTopAllowed())
                     topBlockedRef.setValue(com.pblock.app.domain.StatsTracker.getTopBlocked())
@@ -112,10 +122,14 @@ class RemoteSyncManager(
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to get usage stats (permission missing?)", e)
                     }
+                    
+                    _syncStatus.value = SyncStatus.SYNCED
+                    _lastSyncTime.value = System.currentTimeMillis()
                 } catch (e: Exception) {
                     Log.e(TAG, "Heartbeat failed", e)
+                    _syncStatus.value = SyncStatus.OFFLINE
                 }
-                delay(5 * 60 * 1000L) // every 5 minutes
+                delay(60 * 1000L) // every 60 seconds
             }
         }
 
@@ -155,6 +169,31 @@ class RemoteSyncManager(
                 Log.e(TAG, "Custom blocks listener cancelled", error.toException())
             }
         })
+
+        // Listen for admin removals (unlink flow)
+        val adminsRef = deviceRoot.child("admins")
+        adminsRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                // If there are no admins, and we were protected, it means we got unlinked.
+                if (!snapshot.exists() || !snapshot.hasChildren()) {
+                    scope.launch {
+                        val isProtected = prefs.isProtected.first()
+                        if (isProtected) {
+                            Log.w(TAG, "No admins left. Device was unlinked.")
+                            prefs.setProtected(false, resetStreak = true)
+                            prefs.clearOfflinePin()
+                            com.pblock.app.state.PBlockStateMachine // To access the object if needed
+                            // We don't have direct access to appStateController here easily,
+                            // but we can publish a state change or wait for UI.
+                            // Actually, MainActivity passes `onUnlinked` callback or we can use `AppForeground` later.
+                            // To make it robust without callback changes, we can rely on `isProtected` 
+                            // turning false which modifies `uiState` in AppStateController if it drops.
+                        }
+                    }
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
     }
 
     private suspend fun handleCommand(
@@ -162,13 +201,23 @@ class RemoteSyncManager(
         value: Any,
         commandsRef: com.google.firebase.database.DatabaseReference
     ) {
-        val command = (value as? Map<*, *>)?.get("type")?.toString() ?: value.toString()
-        Log.d(TAG, "Command $commandId -> $command")
+        val map = value as? Map<*, *> ?: return
+        val command = map["type"]?.toString() ?: return
+        val status = map["status"]?.toString() ?: "PENDING"
+        
+        if (status == "ACKNOWLEDGED") return // Already done
+
+        if (status == "PENDING") {
+            // Mark DELIVERED
+            commandsRef.child(commandId).child("status").setValue("DELIVERED")
+        }
+        
+        Log.d(TAG, "Command $commandId -> $command ($status)")
         when (command) {
             "UNLOCK" -> {
                 accountabilityManager.remoteUnlock()
                 onUnlock()
-                commandsRef.child(commandId).removeValue()
+                commandsRef.child(commandId).child("status").setValue("ACKNOWLEDGED")
                 showLocalNotification(
                     title = "Protection Disabled",
                     body = "Your accountability partner has unlocked P-BLOCK."
@@ -177,7 +226,7 @@ class RemoteSyncManager(
             "LOCK" -> {
                 accountabilityManager.remoteLock()
                 onLock()
-                commandsRef.child(commandId).removeValue()
+                commandsRef.child(commandId).child("status").setValue("ACKNOWLEDGED")
                 showLocalNotification(
                     title = "Protection Locked",
                     body = "Your accountability partner has locked P-BLOCK."

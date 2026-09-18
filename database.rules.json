@@ -1,43 +1,36 @@
 {
   "rules": {
-    "users": {
-      ".read": false,
-      ".write": false,
-      "$topicId": {
-        ".read": false,
-        ".write": false
-      }
-    },
+    ".read": false,
+    ".write": false,
     "devices": {
       "$deviceId": {
-        ".read": "auth != null && (auth.uid == $deviceId || root.child('devices').child($deviceId).child('admins').child(auth.uid).val() == true)",
-        ".write": "auth != null && auth.uid == $deviceId",
-        "admins": {
-          "$adminUid": {
-            ".write": "auth != null && auth.uid == $deviceId"
-          }
-        },
-        "status": {
-          ".read": "auth != null && root.child('devices').child($deviceId).child('admins').child(auth.uid).val() == true"
-        },
+        ".read": "auth != null && (auth.uid === $deviceId || data.child('admins').child(auth.uid).val() === true)",
+        ".write": "auth != null && auth.uid === $deviceId",
         "commands": {
-          "$commandId": {
-            ".read": "auth != null && (auth.uid == $deviceId || root.child('devices').child($deviceId).child('admins').child(auth.uid).val() == true)",
-            ".write": "auth != null && (auth.uid == $deviceId || root.child('devices').child($deviceId).child('admins').child(auth.uid).val() == true)"
-          }
+          ".read": "auth != null && (auth.uid === $deviceId || data.parent().child('admins').child(auth.uid).val() === true)",
+          ".write": "auth != null && (auth.uid === $deviceId || data.parent().child('admins').child(auth.uid).val() === true)"
+        },
+        "custom_blocks": {
+          ".read": "auth != null && (auth.uid === $deviceId || data.parent().child('admins').child(auth.uid).val() === true)",
+          ".write": "auth != null && (auth.uid === $deviceId || data.parent().child('admins').child(auth.uid).val() === true)"
         }
       }
     },
-    "pendingcodes": {
-      "$codeHash": {
+    "pending_codes": {
+      "$code": {
         ".read": "auth != null",
-        ".write": "auth != null && root.child('pendingcodes').child($codeHash).child('createdBy').val() == auth.uid"
+        ".write": "auth != null && (!data.exists() || data.child('device_uid').val() === auth.uid || newData.child('claimed_by').val() === auth.uid)"
       }
     },
     "admins": {
       "$adminUid": {
-        ".read": "auth != null && auth.uid == $adminUid",
-        ".write": "auth != null && auth.uid == $adminUid"
+        ".read": "auth != null && auth.uid === $adminUid",
+        ".write": "auth != null && auth.uid === $adminUid",
+        "devices": {
+          "$deviceId": {
+            ".write": "auth != null && auth.uid === $deviceId"
+          }
+        }
       }
     }
   }

@@ -11,18 +11,21 @@ import com.pblock.app.data.BlocklistLoader
 import com.pblock.app.data.PreferencesManager
 import com.pblock.app.state.AppStateController
 
+import com.pblock.app.accountability.RemoteSyncManager
+
 @Composable
 fun NavGraph(
     prefs: PreferencesManager,
     accountabilityManager: AccountabilityManager,
     blocklistLoader: BlocklistLoader,
     appStateController: AppStateController,
+    remoteSyncManager: RemoteSyncManager,
     onStartVpn: () -> Unit,
     onStopVpn: () -> Unit
 ) {
     val navController = rememberNavController()
     val isProtected by prefs.isProtected.collectAsState(initial = false)
-    val partnerCode by prefs.partnerCodeEncrypted.collectAsState(initial = null)
+    val partnerCode by prefs.offlinePinEncrypted.collectAsState(initial = null)
     val appState by appStateController.state.collectAsState()
 
     val startDestination = if (partnerCode == null) "onboarding" else "dashboard"
@@ -44,6 +47,7 @@ fun NavGraph(
                 isProtected = isProtected,
                 prefs = prefs,
                 appState = appState,
+                remoteSyncManager = remoteSyncManager,
                 onNavigateToUnlock = { navController.navigate("unlock") },
                 onNavigateToSettings = { navController.navigate("settings") },
                 onStartVpn = onStartVpn
@@ -52,8 +56,13 @@ fun NavGraph(
         composable("unlock") {
             UnlockScreen(
                 accountabilityManager = accountabilityManager,
+                appStateController = appStateController,
+                remoteSyncManager = remoteSyncManager,
                 onUnlockSuccess = {
                     onStopVpn()
+                    navController.popBackStack()
+                },
+                onNavigateBack = {
                     navController.popBackStack()
                 }
             )

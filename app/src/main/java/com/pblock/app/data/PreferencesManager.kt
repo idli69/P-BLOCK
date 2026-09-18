@@ -13,8 +13,7 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 class PreferencesManager(private val context: Context) {
     companion object {
         val IS_PROTECTED = booleanPreferencesKey("is_protected")
-        val PARTNER_CODE_ENCRYPTED = stringPreferencesKey("partner_code_encrypted")
-        val PARTNER_TOPIC_ID = stringPreferencesKey("partner_topic_id") // derived from plain code BEFORE encryption
+        val OFFLINE_PIN_ENCRYPTED = stringPreferencesKey("offline_pin_encrypted")
         val COOLDOWN_DURATION = longPreferencesKey("cooldown_duration")
         val EMERGENCY_UNLOCK_START = longPreferencesKey("emergency_unlock_start")
         val TOTAL_QUERIES = longPreferencesKey("total_queries")
@@ -32,8 +31,7 @@ class PreferencesManager(private val context: Context) {
     }
 
     val isProtected: Flow<Boolean> = context.dataStore.data.map { it[IS_PROTECTED] ?: false }
-    val partnerCodeEncrypted: Flow<String?> = context.dataStore.data.map { it[PARTNER_CODE_ENCRYPTED] }
-    val partnerTopicId: Flow<String?> = context.dataStore.data.map { it[PARTNER_TOPIC_ID] }
+    val offlinePinEncrypted: Flow<String?> = context.dataStore.data.map { it[OFFLINE_PIN_ENCRYPTED] }
     val cooldownDuration: Flow<Long> = context.dataStore.data.map { it[COOLDOWN_DURATION] ?: (15 * 60 * 1000L) }
     val emergencyUnlockStart: Flow<Long> = context.dataStore.data.map { it[EMERGENCY_UNLOCK_START] ?: 0L }
     val totalQueries: Flow<Long> = context.dataStore.data.map { it[TOTAL_QUERIES] ?: 0L }
@@ -59,11 +57,25 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { it[BATTERY_EXEMPTION_GRANTED] = granted }
     }
 
-    suspend fun incrementQueries(blocked: Boolean) {
-        context.dataStore.edit { prefs ->
-            prefs[TOTAL_QUERIES] = (prefs[TOTAL_QUERIES] ?: 0L) + 1
-            if (blocked) {
-                prefs[BLOCKED_QUERIES] = (prefs[BLOCKED_QUERIES] ?: 0L) + 1
+    @Volatile private var pendingTotalQueries = 0L
+    @Volatile private var pendingBlockedQueries = 0L
+    
+    fun incrementQueries(blocked: Boolean) {
+        pendingTotalQueries++
+        if (blocked) {
+            pendingBlockedQueries++
+        }
+    }
+
+    suspend fun flushPendingQueries() {
+        val total = pendingTotalQueries
+        val blocked = pendingBlockedQueries
+        if (total > 0) {
+            pendingTotalQueries = 0
+            pendingBlockedQueries = 0
+            context.dataStore.edit { prefs ->
+                prefs[TOTAL_QUERIES] = (prefs[TOTAL_QUERIES] ?: 0L) + total
+                prefs[BLOCKED_QUERIES] = (prefs[BLOCKED_QUERIES] ?: 0L) + blocked
             }
         }
     }
@@ -87,10 +99,15 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    suspend fun setPartnerCode(encryptedCode: String, plainTopicId: String) {
+    suspend fun setOfflinePin(encryptedPin: String) {
         context.dataStore.edit {
-            it[PARTNER_CODE_ENCRYPTED] = encryptedCode
-            it[PARTNER_TOPIC_ID] = plainTopicId
+            it[OFFLINE_PIN_ENCRYPTED] = encryptedPin
+        }
+    }
+
+    suspend fun clearOfflinePin() {
+        context.dataStore.edit {
+            it.remove(OFFLINE_PIN_ENCRYPTED)
         }
     }
 

@@ -34,10 +34,17 @@ class AppStateController(
     /** UI-facing binding of persisted state + startup bootstrap. */
     val uiState: StateFlow<PBlockState> = combine(
         prefs.appState,
-        prefs.partnerCodeEncrypted,
-        prefs.isProtected
-    ) { persisted, partnerCode, protected ->
-        bootstrap(persisted, partnerCode, protected)
+        prefs.offlinePinEncrypted,
+        prefs.isProtected,
+        prefs.vpnStatus
+    ) { persisted, offlinePin, protected, vpnStatus ->
+        val bootstrapped = bootstrap(persisted, offlinePin, protected)
+        // If we are currently ACTIVE but VPN is not running while protection is expected, degrade.
+        if (bootstrapped == PBlockState.ACTIVE && protected && vpnStatus != PreferencesManager.VPN_STATUS_RUNNING) {
+            PBlockState.DEGRADED
+        } else {
+            bootstrapped
+        }
     }.stateIn(scope, SharingStarted.Eagerly, PBlockState.SETUP_INCOMPLETE)
 
     fun start() {
@@ -53,6 +60,19 @@ class AppStateController(
                     _state.value = next
                     persistAndMirror(next)
                 }
+            }
+        }
+        scope.launch {
+            while (true) {
+                if (_state.value == PBlockState.COOLDOWN_PENDING) {
+                    val start = prefs.emergencyUnlockStart.first()
+                    val duration = prefs.cooldownDuration.first()
+                    if (start > 0L && System.currentTimeMillis() - start >= duration) {
+                        prefs.clearEmergencyUnlock()
+                        applyEvent(StateEvent.CooldownExpired)
+                    }
+                }
+                kotlinx.coroutines.delay(1000)
             }
         }
     }
@@ -95,12 +115,12 @@ class AppStateController(
      */
     private fun bootstrap(
         persisted: PBlockState,
-        partnerCode: String?,
+        offlinePin: String?,
         protected: Boolean
     ): PBlockState = when {
-        partnerCode == null && persisted == PBlockState.SETUP_INCOMPLETE ->
+        offlinePin == null && persisted == PBlockState.SETUP_INCOMPLETE ->
             PBlockState.SETUP_INCOMPLETE
-        partnerCode == null -> persisted // e.g. DISCONNECTED after an unlink
+        offlinePin == null -> persisted // e.g. DISCONNECTED after an unlink
         persisted == PBlockState.SETUP_INCOMPLETE && protected -> PBlockState.ACTIVE
         else -> persisted
     }

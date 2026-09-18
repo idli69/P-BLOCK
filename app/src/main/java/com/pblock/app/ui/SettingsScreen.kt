@@ -24,7 +24,7 @@ fun SettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     var logs by remember { mutableStateOf(blocklistLoader.getLogs()) }
     val cooldown by prefs.cooldownDuration.collectAsState(initial = 15 * 60 * 1000L)
-    val topicId by prefs.partnerTopicId.collectAsState(initial = null)
+
 
     Scaffold(
         topBar = {
@@ -48,35 +48,7 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Partner Topic ID section
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Accountability Partner", style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        if (topicId != null) {
-                            Text("Topic ID:", style = MaterialTheme.typography.labelMedium)
-                            SelectionContainer {
-                                Text(
-                                    topicId!!,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "Share this ID with your partner so they can open the web dashboard and monitor you remotely.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            Text("No partner code set. Complete onboarding first.", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-            }
+            // Partner section removed because it uses offline pairing now
 
             // Cooldown duration section
             item {

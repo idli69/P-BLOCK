@@ -25,13 +25,18 @@ import com.pblock.app.admin.AdminReceiver
 import com.pblock.app.data.PreferencesManager
 import com.pblock.app.state.PBlockState
 import kotlinx.coroutines.delay
+import com.pblock.app.accountability.RemoteSyncManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Dashboard(
-    prefs: PreferencesManager,
     isProtected: Boolean,
+    prefs: PreferencesManager,
     appState: PBlockState,
+    remoteSyncManager: RemoteSyncManager,
     onNavigateToUnlock: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onStartVpn: () -> Unit
@@ -41,7 +46,7 @@ fun Dashboard(
     val totalQueries by prefs.totalQueries.collectAsState(initial = 0L)
     val blockedQueries by prefs.blockedQueries.collectAsState(initial = 0L)
     val streakStart by prefs.streakStartDate.collectAsState(initial = 0L)
-    val topicId by prefs.partnerTopicId.collectAsState(initial = null)
+
     val vpnStatus by prefs.vpnStatus.collectAsState(initial = PreferencesManager.VPN_STATUS_NOT_RUNNING)
 
     var timeRemaining by remember { mutableStateOf(0L) }
@@ -69,10 +74,32 @@ fun Dashboard(
         }
     }
 
+    val syncStatus by remoteSyncManager.syncStatus.collectAsState()
+    val lastSyncTime by remoteSyncManager.lastSyncTime.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("P-BLOCK", style = MaterialTheme.typography.titleLarge) },
+                title = { 
+                    Column {
+                        Text("P-BLOCK", style = MaterialTheme.typography.titleLarge)
+                        val statusText = when (syncStatus) {
+                            RemoteSyncManager.SyncStatus.OFFLINE -> "Offline"
+                            RemoteSyncManager.SyncStatus.SYNCING -> "Syncing..."
+                            RemoteSyncManager.SyncStatus.SYNCED -> {
+                                if (lastSyncTime > 0) {
+                                    val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(lastSyncTime))
+                                    "Synced at $time"
+                                } else "Synced"
+                            }
+                        }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
@@ -196,35 +223,7 @@ fun Dashboard(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Firebase sync info card
-                if (topicId != null) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("Partner Topic ID", style = MaterialTheme.typography.titleSmall)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                topicId!!,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                                color = MaterialTheme.colorScheme.primary,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "Share this with your accountability partner",
-                                style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
+                // Firebase sync info card removed because pairing is ephemeral
 
                 // Cooldown timer banner
                 if (emergencyStart > 0) {

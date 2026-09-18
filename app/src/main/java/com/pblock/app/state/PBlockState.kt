@@ -43,6 +43,12 @@ sealed class StateEvent {
 
     /** Device re-paired with an (existing or new) partner. */
     data object Relinked : StateEvent()
+
+    /** Required permissions were revoked. */
+    data object PermissionsRevoked : StateEvent()
+
+    /** Forced health re-evaluation (e.g., on foreground). */
+    data object HealthCheck : StateEvent()
 }
 
 object PBlockStateMachine {
@@ -78,6 +84,8 @@ object PBlockStateMachine {
                 is StateEvent.BatteryExemptionRemoved -> PBlockState.DEGRADED
                 is StateEvent.PartnerLock -> PBlockState.PARTNER_LOCKED
                 is StateEvent.PartnerUnlinked -> PBlockState.DISCONNECTED
+                is StateEvent.PermissionsRevoked -> PBlockState.SETUP_INCOMPLETE
+                is StateEvent.HealthCheck -> contrastHealth(hasHealthIssue)
                 else -> current
             }
 
@@ -86,6 +94,8 @@ object PBlockStateMachine {
                 is StateEvent.PartnerUnlinked -> PBlockState.DISCONNECTED
                 is StateEvent.SetupCompleted -> contrastHealth(hasHealthIssue)
                 is StateEvent.Relinked -> contrastHealth(hasHealthIssue)
+                is StateEvent.PermissionsRevoked -> PBlockState.SETUP_INCOMPLETE
+                is StateEvent.HealthCheck -> contrastHealth(hasHealthIssue)
                 else -> current
             }
 
@@ -93,11 +103,12 @@ object PBlockStateMachine {
                 is StateEvent.CooldownStarted -> PBlockState.COOLDOWN_PENDING
                 is StateEvent.PartnerUnlock -> contrastHealth(hasHealthIssue)
                 is StateEvent.PartnerUnlinked -> PBlockState.DISCONNECTED
+                // Do not allow bypassing a hard lock just by revoking permissions
                 else -> current
             }
 
             PBlockState.COOLDOWN_PENDING -> when (event) {
-                // CooldownExpired -> auto-deny: NO transition, stays locked.
+                is StateEvent.CooldownExpired -> PBlockState.PARTNER_LOCKED
                 is StateEvent.PartnerUnlock -> contrastHealth(hasHealthIssue)
                 is StateEvent.PartnerUnlinked -> PBlockState.DISCONNECTED
                 else -> current
@@ -106,6 +117,8 @@ object PBlockStateMachine {
             PBlockState.DISCONNECTED -> when (event) {
                 is StateEvent.Relinked -> contrastHealth(hasHealthIssue)
                 is StateEvent.SetupCompleted -> contrastHealth(hasHealthIssue)
+                is StateEvent.PermissionsRevoked -> PBlockState.SETUP_INCOMPLETE
+                is StateEvent.HealthCheck -> contrastHealth(hasHealthIssue)
                 else -> current
             }
         }

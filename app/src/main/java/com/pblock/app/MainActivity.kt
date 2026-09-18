@@ -50,8 +50,8 @@ class MainActivity : ComponentActivity() {
         prefs = PreferencesManager(this)
         secureKeyManager = SecureKeyManager()
         blocklistLoader = BlocklistLoader(this)
-        accountabilityManager = AccountabilityManager(prefs, secureKeyManager, blocklistLoader)
         authManager = AuthManager()
+        accountabilityManager = AccountabilityManager(prefs, secureKeyManager, blocklistLoader, authManager)
         appStateController = AppStateController(
             prefs, authManager,
             onStateChanged = { state -> remoteSyncManager.publishState(state) }
@@ -77,15 +77,38 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    NavGraph(
-                        prefs = prefs,
-                        accountabilityManager = accountabilityManager,
-                        blocklistLoader = blocklistLoader,
-                        appStateController = appStateController,
-                        onStartVpn = { requestVpnPermission() },
-                        onStopVpn = { stopVpnService() }
-                    )
+                        NavGraph(
+                            prefs = prefs,
+                            accountabilityManager = accountabilityManager,
+                            blocklistLoader = blocklistLoader,
+                            appStateController = appStateController,
+                            remoteSyncManager = remoteSyncManager,
+                            onStartVpn = { requestVpnPermission() },
+                            onStopVpn = { stopVpnService() }
+                        )
                 }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkPermissionsAndHealth()
+    }
+
+    private fun checkPermissionsAndHealth() {
+        // If we are missing required permissions, we must fall back to SETUP_INCOMPLETE
+        // (unless we are hard-locked, which the state machine will handle ignoring).
+        val hasUsage = com.pblock.app.vpn.PermissionChecker.hasUsageStatsPermission(this)
+        val hasAccess = com.pblock.app.vpn.PermissionChecker.hasAccessibilityPermission(this, com.pblock.app.vpn.PBlockAccessibilityService::class.java)
+        val hasNotif = com.pblock.app.vpn.PermissionChecker.hasNotificationPermission(this)
+        val hasVpn = com.pblock.app.vpn.PermissionChecker.hasVpnPermission(this)
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            if (!hasUsage || !hasAccess || !hasNotif || !hasVpn) {
+                appStateController.applyEvent(StateEvent.PermissionsRevoked)
+            } else {
+                appStateController.applyEvent(StateEvent.HealthCheck)
             }
         }
     }
@@ -102,6 +125,7 @@ class MainActivity : ComponentActivity() {
     private fun startVpnService() {
         CoroutineScope(Dispatchers.IO).launch {
             prefs.setProtected(true)
+            appStateController.applyEvent(StateEvent.HealthCheck)
         }
         val intent = Intent(this, BlockingVpnService::class.java)
             .putExtra(BlockingVpnService.EXTRA_MANUAL_START, true)

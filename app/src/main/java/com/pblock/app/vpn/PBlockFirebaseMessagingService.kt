@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.google.firebase.auth.ktx.auth
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -33,22 +34,17 @@ class PBlockFirebaseMessagingService : FirebaseMessagingService() {
         const val DB_URL = "https://p-block-69-default-rtdb.firebaseio.com"
     }
 
-    /**
-     * Called whenever FCM rotates this device's push token.
-     * We save it to the Firebase DB so the partner dashboard always has the latest one.
-     */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.i(TAG, "FCM token refreshed — uploading to Firebase DB")
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val prefs = PreferencesManager(applicationContext)
-                val topicId = prefs.partnerTopicId.first() ?: return@launch
-                Firebase.database(DB_URL)
-                    .getReference("users/$topicId/device_token")
+                val uid = com.google.firebase.ktx.Firebase.auth.currentUser?.uid ?: return@launch
+                com.google.firebase.ktx.Firebase.database(DB_URL)
+                    .getReference("devices/$uid/fcm_token")
                     .setValue(token)
-                Log.i(TAG, "FCM token saved under users/$topicId/device_token")
+                Log.i(TAG, "FCM token saved under devices/$uid/fcm_token")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to save FCM token", e)
             }

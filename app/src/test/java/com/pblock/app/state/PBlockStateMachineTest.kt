@@ -35,10 +35,10 @@ class PBlockStateMachineTest {
         assertEquals(PBlockState.COOLDOWN_PENDING, t.next)
     }
 
-    @Test fun `COOLDOWN_PENDING + CooldownExpired stays COOLDOWN_PENDING (auto-deny)`() {
+    @Test fun `COOLDOWN_PENDING + CooldownExpired returns to PARTNER_LOCKED (auto-deny)`() {
         val t = PBlockStateMachine.transition(PBlockState.COOLDOWN_PENDING, StateEvent.CooldownExpired)
-        assertFalse(t.changed)
-        assertEquals(PBlockState.COOLDOWN_PENDING, t.next)
+        assertTrue(t.changed)
+        assertEquals(PBlockState.PARTNER_LOCKED, t.next)
     }
 
     @Test fun `PARTNER_LOCKED + PartnerUnlock without healthIssue goes ACTIVE`() {
