@@ -1,9 +1,11 @@
 import './style.css';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getDatabase, ref, onValue, set, push } from 'firebase/database';
 
 const firebaseConfig = {
+  apiKey: "AIzaSyA-6hczO_amq7eyceMfK0FSds_tkjm4rdk",
+  projectId: "p-block-69",
   databaseURL: "https://p-block-69-default-rtdb.firebaseio.com"
 };
 
@@ -38,7 +40,10 @@ function renderAuth() {
   passInput.setAttribute('type', 'password');
   passInput.setAttribute('placeholder', 'Password');
   
-  const loginBtn = el('button', '', 'Log In');
+  const loginBtn = el('button', 'btn primary', 'Log In');
+  const signupBtn = el('button', 'btn', 'Sign Up');
+  signupBtn.style.marginLeft = '1rem';
+  
   const errText = el('p');
   errText.style.color = 'var(--danger-color)';
   errText.style.fontSize = '0.9rem';
@@ -52,7 +57,19 @@ function renderAuth() {
     }
   };
 
-  box.append(title, emailInput, passInput, loginBtn, errText);
+  signupBtn.onclick = async () => {
+    try {
+      errText.textContent = '';
+      await createUserWithEmailAndPassword(auth, emailInput.value, passInput.value);
+    } catch (e: any) {
+      errText.textContent = e.message;
+    }
+  };
+
+  const btnRow = el('div');
+  btnRow.append(loginBtn, signupBtn);
+
+  box.append(title, emailInput, passInput, btnRow, errText);
   container.append(box);
   appDiv.append(container);
 }
