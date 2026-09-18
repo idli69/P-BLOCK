@@ -17,3 +17,10 @@ local.properties
 # App specific
 app/build/
 app/.cxx/
+
+# Build artifacts / tooling (never commit these)
+*.msi
+.firebase/
+node_modules/
+partner_web/dist/
+npm-debug.log*
