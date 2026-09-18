@@ -25,6 +25,7 @@ fun OnboardingScreen(
         generatedCode = formattedCode
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -49,11 +50,17 @@ fun OnboardingScreen(
         }
         
         Spacer(modifier = Modifier.height(32.dp))
+        Text("Required Permissions:", fontWeight = FontWeight.Bold)
         
-        Text("Important Steps:", fontWeight = FontWeight.Bold)
-        Text("1. Write down or share the code above.")
-        Text("2. Enable the VPN in the next step.")
-        Text("3. Go to Android Settings -> Network & internet -> VPN -> P-BLOCK -> Enable 'Always-on VPN' and 'Block connections without VPN' to prevent bypassing.")
+        Button(onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)) }, modifier = Modifier.fillMaxWidth().padding(vertical=4.dp)) {
+            Text("1. Grant Usage Access (For App Stats)")
+        }
+        Button(onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, modifier = Modifier.fillMaxWidth().padding(vertical=4.dp)) {
+            Text("2. Enable Accessibility Service (Anti-Uninstall)")
+        }
+        Button(onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }, modifier = Modifier.fillMaxWidth().padding(vertical=4.dp)) {
+            Text("3. Disable Battery Optimization (Anti-Kill)")
+        }
         
         Spacer(modifier = Modifier.height(32.dp))
         
@@ -66,7 +73,7 @@ fun OnboardingScreen(
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("I have saved the code, Enable Protection")
+            Text("All Done! Start Protection")
         }
     }
 }

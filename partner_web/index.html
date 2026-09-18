@@ -109,6 +109,10 @@
                     <div class="stat-label">Blocked Queries</div>
                 </div>
                 <div class="stat">
+                    <div class="stat-value" id="pickupsVal" style="color: #4CAF50;">—</div>
+                    <div class="stat-label">Phone Pickups Today</div>
+                </div>
+                <div class="stat">
                     <div class="stat-value" id="lockStateVal">—</div>
                     <div class="stat-label">Status</div>
                 </div>
@@ -116,6 +120,16 @@
             <hr>
             <button class="btn-unlock" onclick="sendCommand('UNLOCK')">UNLOCK DEVICE</button>
             <button class="btn-lock"   onclick="sendCommand('LOCKED')">Re-Lock Device</button>
+        </div>
+
+        <!-- App Screen Time Card -->
+        <div class="card">
+            <h2>Digital Wellbeing (Screen Time)</h2>
+            <p class="hint">Time spent on apps today (minutes). Requires Usage Access to be enabled on the phone.</p>
+            <table id="usageTable" style="margin-top: 16px;">
+                <thead><tr><th>Application</th><th style="text-align:right">Minutes</th></tr></thead>
+                <tbody><tr><td colspan="2" style="text-align:center; color:#555;">Waiting for data...</td></tr></tbody>
+            </table>
         </div>
 
         <!-- Custom Blocking Card -->
@@ -198,6 +212,11 @@
 
             onValue(ref(db, `users/${currentTopic}/top_allowed`), snap => renderTable('allowedTable', snap.val(), false));
             onValue(ref(db, `users/${currentTopic}/top_blocked`), snap => renderTable('blockedTable', snap.val(), true));
+            onValue(ref(db, `users/${currentTopic}/daily_usage`), snap => renderTable('usageTable', snap.val(), false));
+            
+            onValue(ref(db, `users/${currentTopic}/daily_pickups`), snap => {
+                document.getElementById('pickupsVal').textContent = snap.val() ?? "—";
+            });
         };
 
         window.sendCommand = async function(cmd) {

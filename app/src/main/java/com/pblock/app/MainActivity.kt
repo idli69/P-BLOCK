@@ -51,6 +51,10 @@ class MainActivity : ComponentActivity() {
         // Start Firebase listener immediately — it will attach as soon as a topicId exists
         remoteSyncManager.start()
 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(

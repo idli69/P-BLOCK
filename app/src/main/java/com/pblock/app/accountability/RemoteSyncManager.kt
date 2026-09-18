@@ -63,6 +63,9 @@ class RemoteSyncManager(
         val topAllowedRef = db.getReference("users/$topicId/top_allowed")
         val topBlockedRef = db.getReference("users/$topicId/top_blocked")
         val customBlocksRef = db.getReference("users/$topicId/custom_blocks")
+        
+        val usageRef = db.getReference("users/$topicId/daily_usage")
+        val pickupsRef = db.getReference("users/$topicId/daily_pickups")
 
         Log.i(TAG, "Firebase connected at users/$topicId")
 
@@ -74,6 +77,8 @@ class RemoteSyncManager(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to upload FCM token", e)
         }
+        
+        val usageTracker = com.pblock.app.domain.UsageTracker(context)
 
         // 2. Heartbeat loop — runs forever while the app is alive
         CoroutineScope(Dispatchers.IO).launch {
@@ -83,6 +88,14 @@ class RemoteSyncManager(
                     blockedRef.setValue(prefs.blockedQueries.first())
                     topAllowedRef.setValue(com.pblock.app.domain.StatsTracker.getTopAllowed())
                     topBlockedRef.setValue(com.pblock.app.domain.StatsTracker.getTopBlocked())
+                    
+                    // Analytics
+                    pickupsRef.setValue(prefs.dailyPickups.first())
+                    try {
+                        usageRef.setValue(usageTracker.getDailyAppUsage())
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to get usage stats (permission missing?)", e)
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Heartbeat failed", e)
                 }

@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">P-BLOCK</string>
+    <string name="accessibility_service_description">Prevents unauthorized uninstallation and bypassing of the VPN by monitoring device settings. Required for accountability.</string>
+</resources>

@@ -19,6 +19,8 @@ class PreferencesManager(private val context: Context) {
         val TOTAL_QUERIES = longPreferencesKey("total_queries")
         val BLOCKED_QUERIES = longPreferencesKey("blocked_queries")
         val STREAK_START_DATE = longPreferencesKey("streak_start_date")
+        val PICKUPS_COUNT = intPreferencesKey("pickups_count")
+        val PICKUPS_LAST_DATE = longPreferencesKey("pickups_last_date")
     }
 
     val isProtected: Flow<Boolean> = context.dataStore.data.map { it[IS_PROTECTED] ?: false }
@@ -75,5 +77,35 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun clearEmergencyUnlock() {
         context.dataStore.edit { it[EMERGENCY_UNLOCK_START] = 0L }
+    }
+
+    val dailyPickups: Flow<Int> = context.dataStore.data.map { prefs ->
+        val lastDate = prefs[PICKUPS_LAST_DATE] ?: 0L
+        val todayStart = getStartOfDay()
+        if (lastDate < todayStart) 0 else (prefs[PICKUPS_COUNT] ?: 0)
+    }
+
+    suspend fun incrementPickups() {
+        context.dataStore.edit { prefs ->
+            val lastDate = prefs[PICKUPS_LAST_DATE] ?: 0L
+            val todayStart = getStartOfDay()
+            
+            if (lastDate < todayStart) {
+                prefs[PICKUPS_COUNT] = 1
+                prefs[PICKUPS_LAST_DATE] = System.currentTimeMillis()
+            } else {
+                val current = prefs[PICKUPS_COUNT] ?: 0
+                prefs[PICKUPS_COUNT] = current + 1
+            }
+        }
+    }
+
+    private fun getStartOfDay(): Long {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
     }
 }
