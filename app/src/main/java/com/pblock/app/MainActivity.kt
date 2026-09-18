@@ -86,7 +86,9 @@ class MainActivity : ComponentActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             prefs.setProtected(true)
         }
-        startForegroundService(Intent(this, BlockingVpnService::class.java))
+        val intent = Intent(this, BlockingVpnService::class.java)
+            .putExtra(BlockingVpnService.EXTRA_MANUAL_START, true)
+        startForegroundService(intent)
     }
 
     private fun stopVpnService() {

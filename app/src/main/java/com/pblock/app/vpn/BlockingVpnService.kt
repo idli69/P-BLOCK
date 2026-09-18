@@ -26,13 +26,16 @@ class BlockingVpnService : VpnService() {
     companion object {
         private const val TAG = "BlockingVpnService"
         const val UPSTREAM_DNS = "8.8.8.8"
-        
+        const val EXTRA_MANUAL_START = "com.pblock.app.extra.MANUAL_START"
+
         @Volatile
         var activeFilterEngine: FilterEngine? = null
     }
 
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var wasRunning = false
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    private val statusScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private lateinit var prefs: PreferencesManager
     private lateinit var filterEngine: FilterEngine
@@ -87,9 +90,13 @@ class BlockingVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         serviceScope.launch {
-            if (prefs.isProtected.first()) {
+            val manualStart = intent?.getBooleanExtra(EXTRA_MANUAL_START, false) ?: false
+            if (manualStart || prefs.isProtected.first()) {
                 startVpn()
             } else {
+                statusScope.launch {
+                    prefs.setVpnStatus(PreferencesManager.VPN_STATUS_NOT_RUNNING)
+                }
                 stopSelf()
             }
         }
@@ -111,6 +118,20 @@ class BlockingVpnService : VpnService() {
         // This is a common Android VPN trick to intercept only DNS.
         
         vpnInterface = builder.establish()
+
+        if (vpnInterface == null) {
+            Log.e(TAG, "Failed to establish VPN interface — marking VPN as failed")
+            statusScope.launch {
+                prefs.setVpnStatus(PreferencesManager.VPN_STATUS_FAILED)
+            }
+            stopSelf()
+            return
+        }
+
+        wasRunning = true
+        statusScope.launch {
+            prefs.setVpnStatus(PreferencesManager.VPN_STATUS_RUNNING)
+        }
 
         startForeground(1, createNotification())
 
@@ -327,5 +348,10 @@ class BlockingVpnService : VpnService() {
         serviceScope.cancel()
         vpnInterface?.close()
         vpnInterface = null
+        if (wasRunning) {
+            statusScope.launch {
+                prefs.setVpnStatus(PreferencesManager.VPN_STATUS_NOT_RUNNING)
+            }
+        }
     }
 }

@@ -40,6 +40,7 @@ fun Dashboard(
     val blockedQueries by prefs.blockedQueries.collectAsState(initial = 0L)
     val streakStart by prefs.streakStartDate.collectAsState(initial = 0L)
     val topicId by prefs.partnerTopicId.collectAsState(initial = null)
+    val vpnStatus by prefs.vpnStatus.collectAsState(initial = PreferencesManager.VPN_STATUS_NOT_RUNNING)
 
     var timeRemaining by remember { mutableStateOf(0L) }
 
@@ -114,6 +115,34 @@ fun Dashboard(
                     style = MaterialTheme.typography.titleMedium,
                     color = Color(0xFFFF9800)
                 )
+
+                if (vpnStatus == PreferencesManager.VPN_STATUS_FAILED) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Text(
+                            "VPN failed to start. Protection is NOT active — please try again.",
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else if (vpnStatus != PreferencesManager.VPN_STATUS_RUNNING) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Text(
+                            "VPN is not confirmed running — blocking may not be enforced.",
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(28.dp))
 

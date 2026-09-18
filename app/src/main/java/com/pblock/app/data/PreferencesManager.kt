@@ -21,6 +21,11 @@ class PreferencesManager(private val context: Context) {
         val STREAK_START_DATE = longPreferencesKey("streak_start_date")
         val PICKUPS_COUNT = intPreferencesKey("pickups_count")
         val PICKUPS_LAST_DATE = longPreferencesKey("pickups_last_date")
+        val VPN_STATUS = stringPreferencesKey("vpn_status")
+
+        const val VPN_STATUS_RUNNING = "RUNNING"
+        const val VPN_STATUS_FAILED = "FAILED"
+        const val VPN_STATUS_NOT_RUNNING = "NOT_RUNNING"
     }
 
     val isProtected: Flow<Boolean> = context.dataStore.data.map { it[IS_PROTECTED] ?: false }
@@ -31,6 +36,11 @@ class PreferencesManager(private val context: Context) {
     val totalQueries: Flow<Long> = context.dataStore.data.map { it[TOTAL_QUERIES] ?: 0L }
     val blockedQueries: Flow<Long> = context.dataStore.data.map { it[BLOCKED_QUERIES] ?: 0L }
     val streakStartDate: Flow<Long> = context.dataStore.data.map { it[STREAK_START_DATE] ?: 0L }
+    val vpnStatus: Flow<String> = context.dataStore.data.map { it[VPN_STATUS] ?: VPN_STATUS_NOT_RUNNING }
+
+    suspend fun setVpnStatus(status: String) {
+        context.dataStore.edit { it[VPN_STATUS] = status }
+    }
 
     suspend fun incrementQueries(blocked: Boolean) {
         context.dataStore.edit { prefs ->
