@@ -1,9 +1,43 @@
 {
   "rules": {
     "users": {
+      ".read": false,
+      ".write": false,
       "$topicId": {
-        ".read": true,
-        ".write": true
+        ".read": false,
+        ".write": false
+      }
+    },
+    "devices": {
+      "$deviceId": {
+        ".read": "auth != null && (auth.uid == $deviceId || root.child('devices').child($deviceId).child('admins').child(auth.uid).val() == true)",
+        ".write": "auth != null && auth.uid == $deviceId",
+        "admins": {
+          "$adminUid": {
+            ".write": "auth != null && auth.uid == $deviceId"
+          }
+        },
+        "status": {
+          ".read": "auth != null && root.child('devices').child($deviceId).child('admins').child(auth.uid).val() == true"
+        },
+        "commands": {
+          "$commandId": {
+            ".read": "auth != null && (auth.uid == $deviceId || root.child('devices').child($deviceId).child('admins').child(auth.uid).val() == true)",
+            ".write": "auth != null && (auth.uid == $deviceId || root.child('devices').child($deviceId).child('admins').child(auth.uid).val() == true)"
+          }
+        }
+      }
+    },
+    "pendingcodes": {
+      "$codeHash": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('pendingcodes').child($codeHash).child('createdBy').val() == auth.uid"
+      }
+    },
+    "admins": {
+      "$adminUid": {
+        ".read": "auth != null && auth.uid == $adminUid",
+        ".write": "auth != null && auth.uid == $adminUid"
       }
     }
   }
