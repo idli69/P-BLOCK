@@ -17,9 +17,13 @@ import kotlinx.coroutines.launch
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        val action = intent.action
+        if (action != Intent.ACTION_BOOT_COMPLETED &&
+            action != Intent.ACTION_MY_PACKAGE_REPLACED &&
+            action != Intent.ACTION_LOCKED_BOOT_COMPLETED
+        ) return
 
-        Log.i("BootReceiver", "Boot completed — checking if VPN should restart")
+        Log.i("BootReceiver", "$action received — checking if VPN should restart")
 
         CoroutineScope(Dispatchers.IO).launch {
             val prefs = PreferencesManager(context)
@@ -30,8 +34,12 @@ class BootReceiver : BroadcastReceiver() {
                 if (vpnIntent == null) {
                     // Permission already granted — restart VPN
                     val serviceIntent = Intent(context, BlockingVpnService::class.java)
-                    context.startForegroundService(serviceIntent)
-                    Log.i("BootReceiver", "VPN service restarted after boot")
+                    try {
+                        context.startForegroundService(serviceIntent)
+                        Log.i("BootReceiver", "VPN service restarted after $action")
+                    } catch (e: Exception) {
+                        Log.w("BootReceiver", "Could not start VPN foreground service from $action", e)
+                    }
                 } else {
                     Log.w("BootReceiver", "VPN permission not pre-granted — cannot auto-start")
                 }

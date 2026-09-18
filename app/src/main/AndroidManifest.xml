@@ -11,7 +11,6 @@
 
     <!-- VPN foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- Device admin (uninstall protection) -->
     <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
@@ -46,7 +45,7 @@
         <service
             android:name=".vpn.BlockingVpnService"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
+            android:foregroundServiceType="vpn"
             android:permission="android.permission.BIND_VPN_SERVICE">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
