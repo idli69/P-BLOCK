@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "65006717904",
+    "project_id": "p-block-69",
+    "storage_bucket": "p-block-69.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:65006717904:android:301abeb00cb85eb9ce87d5",
+        "android_client_info": {
+          "package_name": "com.pblock.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBF75Q-jfsrhFzaA-uDcB33zpcDhO2FAsk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,16 +1,16 @@
 package com.pblock.app.accountability
 
 import android.util.Log
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
+import com.google.firebase.database.ktx.database
+import com.google.firebase.ktx.Firebase
 import com.pblock.app.data.PreferencesManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
+import kotlinx.coroutines.launch
 
 class RemoteSyncManager(
     private val prefs: PreferencesManager,
@@ -19,46 +19,41 @@ class RemoteSyncManager(
     private val TAG = "RemoteSyncManager"
 
     suspend fun startPolling() {
-        withContext(Dispatchers.IO) {
-            while (true) {
-                try {
-                    val isProtected = prefs.isProtected.first()
-                    if (isProtected) {
-                        val partnerCodeEncrypted = prefs.partnerCodeEncrypted.first()
-                        if (partnerCodeEncrypted != null) {
-                            // Derive a topic ID from the encrypted partner code hash (to keep it somewhat obscure but deterministic)
-                            val topicId = "pblock_sync_" + Math.abs(partnerCodeEncrypted.hashCode())
-                            
-                            val url = URL("https://ntfy.sh/$topicId/json?poll=1")
-                            val connection = url.openConnection() as HttpURLConnection
-                            connection.requestMethod = "GET"
-                            connection.connectTimeout = 5000
-                            connection.readTimeout = 5000
-
-                            if (connection.responseCode == 200) {
-                                val reader = BufferedReader(InputStreamReader(connection.inputStream))
-                                var line: String?
-                                while (reader.readLine().also { line = it } != null) {
-                                    val obj = JSONObject(line!!)
-                                    if (obj.optString("event") == "message" && obj.optString("message").trim() == "UNLOCK") {
-                                        Log.i(TAG, "Remote UNLOCK command received!")
-                                        // Acknowledge by unlocking (in a real app we'd verify a signed payload or password)
-                                        prefs.setProtected(false)
-                                        prefs.clearEmergencyUnlock()
-                                        break
-                                    }
+        // Renamed to keep MainActivity unchanged, but we are setting up a listener
+        try {
+            val isProtected = prefs.isProtected.first()
+            if (isProtected) {
+                val partnerCodeEncrypted = prefs.partnerCodeEncrypted.first()
+                if (partnerCodeEncrypted != null) {
+                    val topicId = "pblock_sync_" + Math.abs(partnerCodeEncrypted.hashCode())
+                    
+                    val database = Firebase.database
+                    val ref = database.getReference("users/$topicId/status")
+                    
+                    Log.i(TAG, "Listening to Firebase Realtime Database at users/$topicId/status")
+                    
+                    ref.addValueEventListener(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            val status = snapshot.getValue(String::class.java)
+                            if (status == "UNLOCK") {
+                                Log.i(TAG, "Firebase UNLOCK command received!")
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    prefs.setProtected(false)
+                                    prefs.clearEmergencyUnlock()
+                                    // Reset status so it doesn't loop
+                                    ref.setValue("LOCKED")
                                 }
-                                reader.close()
                             }
                         }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error polling remote sync", e)
+
+                        override fun onCancelled(error: DatabaseError) {
+                            Log.e(TAG, "Firebase listener cancelled", error.toException())
+                        }
+                    })
                 }
-                
-                // Poll every 30 seconds
-                delay(30000)
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up Firebase listener", e)
         }
     }
 }

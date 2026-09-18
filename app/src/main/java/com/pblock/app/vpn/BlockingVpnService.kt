@@ -274,11 +274,7 @@ class BlockingVpnService : VpnService() {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, "vpn_channel")
-        } else {
-            Notification.Builder(this)
-        }
+        val builder = Notification.Builder(this, "vpn_channel")
 
         return builder
             .setContentTitle("P-BLOCK is Active")
