@@ -117,7 +117,12 @@ class BlockingVpnService : VpnService() {
         // And since we set DNS to 10.0.0.2, Android will send DNS queries to 10.0.0.2!
         // This is a common Android VPN trick to intercept only DNS.
         
-        vpnInterface = builder.establish()
+        vpnInterface = try {
+            builder.establish()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to establish VPN interface", e)
+            null
+        }
 
         if (vpnInterface == null) {
             Log.e(TAG, "Failed to establish VPN interface — marking VPN as failed")
@@ -133,7 +138,17 @@ class BlockingVpnService : VpnService() {
             prefs.setVpnStatus(PreferencesManager.VPN_STATUS_RUNNING)
         }
 
-        startForeground(1, createNotification())
+        try {
+            startForeground(1, createNotification())
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to promote to foreground (is app configured as a VPN?)", e)
+            statusScope.launch {
+                prefs.setVpnStatus(PreferencesManager.VPN_STATUS_FAILED)
+            }
+            wasRunning = false
+            stopSelf()
+            return
+        }
 
         vpnInterface?.let { vpn ->
             serviceScope.launch {
