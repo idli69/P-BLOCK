@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, creat
 import { getDatabase, ref, onValue, set, push } from 'firebase/database';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA-6hczO_amq7eyceMfK0FSds_tkjm4rdk",
+  apiKey: "AIzaSyDtEq8rXuqz2Wu1j0hF3dO2cx5sGovTV6U",
   projectId: "p-block-69",
   databaseURL: "https://p-block-69-default-rtdb.firebaseio.com"
 };
