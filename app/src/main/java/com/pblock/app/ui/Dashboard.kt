@@ -18,6 +18,8 @@ import android.content.Intent
 import com.pblock.app.admin.AdminReceiver
 import com.pblock.app.data.PreferencesManager
 import kotlinx.coroutines.delay
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.scale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,9 +35,21 @@ fun Dashboard(
     
     val totalQueries by prefs.totalQueries.collectAsState(initial = 0L)
     val blockedQueries by prefs.blockedQueries.collectAsState(initial = 0L)
+    val streakStart by prefs.streakStartDate.collectAsState(initial = 0L)
     
     var timeRemaining by remember { mutableStateOf(0L) }
     
+    val infiniteTransition = rememberInfiniteTransition()
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
     LaunchedEffect(emergencyStart, cooldown) {
         if (emergencyStart > 0) {
             while (true) {
@@ -78,11 +92,14 @@ fun Dashboard(
                 Icon(
                     imageVector = Icons.Default.Lock,
                     contentDescription = "Protected",
-                    modifier = Modifier.size(80.dp),
+                    modifier = Modifier.size(80.dp).scale(pulseScale),
                     tint = Color(0xFF4CAF50) // Green for protected
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Protection is ACTIVE", style = MaterialTheme.typography.headlineMedium)
+                
+                val streakDays = if (streakStart > 0) ((System.currentTimeMillis() - streakStart) / (1000 * 60 * 60 * 24)) else 0
+                Text("🔥 $streakDays Day Streak", style = MaterialTheme.typography.titleMedium, color = Color(0xFFFF9800))
                 
                 Spacer(modifier = Modifier.height(32.dp))
                 

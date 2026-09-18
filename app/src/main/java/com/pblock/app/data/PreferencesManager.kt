@@ -17,6 +17,7 @@ class PreferencesManager(private val context: Context) {
         val EMERGENCY_UNLOCK_START = longPreferencesKey("emergency_unlock_start")
         val TOTAL_QUERIES = longPreferencesKey("total_queries")
         val BLOCKED_QUERIES = longPreferencesKey("blocked_queries")
+        val STREAK_START_DATE = longPreferencesKey("streak_start_date")
     }
 
     val isProtected: Flow<Boolean> = context.dataStore.data.map { it[IS_PROTECTED] ?: false }
@@ -25,6 +26,7 @@ class PreferencesManager(private val context: Context) {
     val emergencyUnlockStart: Flow<Long> = context.dataStore.data.map { it[EMERGENCY_UNLOCK_START] ?: 0L }
     val totalQueries: Flow<Long> = context.dataStore.data.map { it[TOTAL_QUERIES] ?: 0L }
     val blockedQueries: Flow<Long> = context.dataStore.data.map { it[BLOCKED_QUERIES] ?: 0L }
+    val streakStartDate: Flow<Long> = context.dataStore.data.map { it[STREAK_START_DATE] ?: 0L }
 
     suspend fun incrementQueries(blocked: Boolean) {
         context.dataStore.edit { prefs ->
@@ -38,7 +40,16 @@ class PreferencesManager(private val context: Context) {
     }
 
     suspend fun setProtected(value: Boolean) {
-        context.dataStore.edit { it[IS_PROTECTED] = value }
+        context.dataStore.edit { prefs ->
+            prefs[IS_PROTECTED] = value
+            if (value) {
+                if ((prefs[STREAK_START_DATE] ?: 0L) == 0L) {
+                    prefs[STREAK_START_DATE] = System.currentTimeMillis()
+                }
+            } else {
+                prefs[STREAK_START_DATE] = 0L // Reset streak on unlock
+            }
+        }
     }
 
     suspend fun setPartnerCode(encryptedCode: String) {

@@ -32,9 +32,11 @@ class BlockingVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     
-    private lateinit var filterEngine: FilterEngine
     private lateinit var prefs: PreferencesManager
+    private lateinit var filterEngine: FilterEngine
     private lateinit var blocklistLoader: BlocklistLoader
+    
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
@@ -45,6 +47,15 @@ class BlockingVpnService : VpnService() {
             loadBlocklist(data.domains)
             loadKeywords(data.keywords)
         }
+        
+        // Fetch massive blocklist via OTA in background
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val otaDomains = blocklistLoader.downloadOisdBlocklist()
+            if (otaDomains.isNotEmpty()) {
+                filterEngine.loadBlocklist(otaDomains) // Overwrites sample list with 100k+ real domains
+            }
+        }
+        
         createNotificationChannel()
     }
 
@@ -138,6 +149,9 @@ class BlockingVpnService : VpnService() {
         
         if (isBlocked) {
             blocklistLoader.logEvent("Blocked: $hostname")
+            mainHandler.post {
+                android.widget.Toast.makeText(this@BlockingVpnService, "Shield Active: Blocked $hostname", android.widget.Toast.LENGTH_SHORT).show()
+            }
             // Send NXDOMAIN
             val response = buildNxDomainResponse(dnsPayload)
             sendUdpResponse(response, srcIp, destIp, srcPort, destPort, out)

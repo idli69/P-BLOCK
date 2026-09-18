@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P-BLOCK Partner Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .card {
+            background-color: #1e1e1e;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background-color: #2c2c2c;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.2s;
+        }
+        button.unlock {
+            background-color: #E53935;
+        }
+        button:hover { opacity: 0.9; }
+        .hidden { display: none; }
+        .status { margin-top: 20px; padding: 10px; border-radius: 6px; }
+        .active { background-color: rgba(76, 175, 80, 0.2); color: #4CAF50; }
+        .offline { background-color: rgba(229, 57, 53, 0.2); color: #E53935; }
+    </style>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
+
+        // TODO: REPLACE THIS WITH YOUR FIREBASE CONFIG FROM google-services.json
+        const firebaseConfig = {
+            databaseURL: "https://p-block-69-default-rtdb.firebaseio.com" // Update with your actual project ID
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        
+        let currentRef = null;
+
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            const topicId = document.getElementById('topicId').value.trim();
+            if(!topicId) return alert('Enter a valid link path');
+
+            document.getElementById('setupForm').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+
+            const statusRef = ref(database, 'users/' + topicId + '/status');
+            const activeRef = ref(database, 'users/' + topicId + '/last_active');
+            
+            // Listen for Unlock status
+            onValue(statusRef, (snapshot) => {
+                const data = snapshot.val();
+                if(data === 'UNLOCK') {
+                    document.getElementById('lockState').innerText = "UNLOCKED (Waiting for device...)";
+                } else {
+                    document.getElementById('lockState').innerText = "LOCKED";
+                }
+            });
+
+            // Listen for Heartbeat
+            onValue(activeRef, (snapshot) => {
+                const lastActive = snapshot.val();
+                if(!lastActive) {
+                    updateHeartbeat("Never", false);
+                    return;
+                }
+                const diffMins = (Date.now() - lastActive) / (1000 * 60);
+                if (diffMins > 20) {
+                    updateHeartbeat(`Offline (Last seen ${Math.round(diffMins)} mins ago)`, false);
+                } else {
+                    updateHeartbeat(`Online (Last ping ${Math.round(diffMins)} mins ago)`, true);
+                }
+            });
+
+            // Unlock Button Logic
+            document.getElementById('unlockBtn').addEventListener('click', () => {
+                if(confirm("Are you sure you want to disable protection on their device?")) {
+                    set(statusRef, "UNLOCK").then(() => alert("Unlock command sent!"));
+                }
+            });
+        });
+
+        function updateHeartbeat(text, isOnline) {
+            const el = document.getElementById('heartbeatBox');
+            el.innerText = text;
+            el.className = 'status ' + (isOnline ? 'active' : 'offline');
+        }
+    </script>
+</head>
+<body>
+    <div class="card" id="setupForm">
+        <h2>Partner Login</h2>
+        <p>Enter the Topic ID from their Dashboard</p>
+        <input type="text" id="topicId" placeholder="e.g. pblock_sync_12345">
+        <button id="connectBtn">Connect to Device</button>
+    </div>
+
+    <div class="card hidden" id="dashboard">
+        <h2>Remote Control</h2>
+        <h3 id="lockState">LOCKED</h3>
+        
+        <div id="heartbeatBox" class="status offline">Connecting...</div>
+        
+        <button id="unlockBtn" class="unlock">UNLOCK DEVICE</button>
+    </div>
+</body>
+</html>

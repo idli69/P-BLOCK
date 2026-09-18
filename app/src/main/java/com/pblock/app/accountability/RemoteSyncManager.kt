@@ -29,8 +29,21 @@ class RemoteSyncManager(
                     
                     val database = Firebase.database
                     val ref = database.getReference("users/$topicId/status")
+                    val activeRef = database.getReference("users/$topicId/last_active")
                     
                     Log.i(TAG, "Listening to Firebase Realtime Database at users/$topicId/status")
+                    
+                    // Heartbeat Loop
+                    CoroutineScope(Dispatchers.IO).launch {
+                        while (prefs.isProtected.first()) {
+                            try {
+                                activeRef.setValue(System.currentTimeMillis())
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to write heartbeat", e)
+                            }
+                            kotlinx.coroutines.delay(5 * 60 * 1000) // 5 minutes
+                        }
+                    }
                     
                     ref.addValueEventListener(object : ValueEventListener {
                         override fun onDataChange(snapshot: DataSnapshot) {

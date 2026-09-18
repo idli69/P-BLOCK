@@ -38,6 +38,35 @@ class BlocklistLoader(private val context: Context) {
         return BlocklistData(domains, keywords)
     }
 
+    suspend fun downloadOisdBlocklist(): List<String> {
+        val newDomains = mutableListOf<String>()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                // Fetching a basic, well-maintained adult blocklist (StevenBlack alternates/porn)
+                val url = java.net.URL("https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts")
+                val connection = url.openConnection()
+                connection.connectTimeout = 10000
+                connection.readTimeout = 20000
+                
+                val reader = InputStreamReader(connection.getInputStream()).buffered()
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    if (line!!.startsWith("0.0.0.0 ")) {
+                        val domain = line!!.substring(8).trim()
+                        if (domain != "0.0.0.0") {
+                            newDomains.add(domain)
+                        }
+                    }
+                }
+                reader.close()
+                android.util.Log.i("BlocklistLoader", "Successfully downloaded ${newDomains.size} domains OTA")
+            } catch (e: Exception) {
+                android.util.Log.e("BlocklistLoader", "Failed to download OTA blocklist", e)
+            }
+        }
+        return newDomains
+    }
+
     // Append-only local event log for requests/unlocks
     fun logEvent(event: String) {
         try {
