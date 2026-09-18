@@ -178,14 +178,18 @@
 
         window.connect = function() {
             let raw = document.getElementById('topicInput').value.trim().toUpperCase().replace(/-/g, "");
-            if (!raw) { alert("Please enter a Pairing Code"); return; }
-            if (raw.length !== 6 && !raw.startsWith("PBLOCK_")) {
-                alert("Pairing code must be 6 characters.");
+            const isLegacyTopic = raw.startsWith("PBLOCK_");
+            if (isLegacyTopic) {
+                if (!/^PBLOCK_[A-Z0-9]+$/.test(raw)) { alert("Invalid topic format."); return; }
+            } else if (!raw) {
+                alert("Please enter a Pairing Code"); return;
+            } else if (!/^[A-Z0-9]{6}$/.test(raw)) {
+                alert("Pairing code must be 6 characters (A-Z, 0-9).");
                 return;
             }
 
             // Derive Topic ID exactly as Android does
-            currentTopic = raw.startsWith("PBLOCK_") ? raw.toLowerCase() : `pblock_${raw}`;
+            currentTopic = isLegacyTopic ? raw.toLowerCase() : `pblock_${raw}`;
             
             document.getElementById('loginCard').classList.add('hidden');
             document.getElementById('dashContainer').classList.remove('hidden');
@@ -244,25 +248,32 @@
 
         function renderTable(tableId, data, isBlocked) {
             const tbody = document.querySelector(`#${tableId} tbody`);
-            if (!data) {
-                tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#555;">No data yet.</td></tr>`;
-                return;
-            }
+            tbody.textContent = "";
             
-            const entries = Object.entries(data).sort((a,b) => b[1] - a[1]);
+            const entries = data ? Object.entries(data).sort((a,b) => b[1] - a[1]) : [];
             if (entries.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#555;">No data yet.</td></tr>`;
+                const emptyRow = document.createElement('tr');
+                const emptyCell = document.createElement('td');
+                emptyCell.colSpan = 2;
+                emptyCell.setAttribute('style', 'text-align:center; color:#555;');
+                emptyCell.textContent = data ? "No data yet." : "Waiting for data...";
+                emptyRow.appendChild(emptyCell);
+                tbody.appendChild(emptyRow);
                 return;
             }
 
-            let html = "";
             for (const [domain, count] of entries) {
-                html += `<tr>
-                    <td class="domain">${domain}</td>
-                    <td class="count ${isBlocked ? 'blocked' : ''}">${count.toLocaleString()}</td>
-                </tr>`;
+                const tr = document.createElement('tr');
+                const td1 = document.createElement('td');
+                td1.className = 'domain';
+                td1.textContent = domain;
+                const td2 = document.createElement('td');
+                td2.className = `count ${isBlocked ? 'blocked' : ''}`;
+                td2.textContent = count.toLocaleString();
+                tr.appendChild(td1);
+                tr.appendChild(td2);
+                tbody.appendChild(tr);
             }
-            tbody.innerHTML = html;
         }
 
         function setOnline(text) {
