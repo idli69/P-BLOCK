@@ -21,12 +21,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+import com.pblock.app.accountability.RemoteSyncManager
+
 class MainActivity : ComponentActivity() {
 
     private lateinit var prefs: PreferencesManager
     private lateinit var secureKeyManager: SecureKeyManager
     private lateinit var blocklistLoader: BlocklistLoader
     private lateinit var accountabilityManager: AccountabilityManager
+    private lateinit var remoteSyncManager: RemoteSyncManager
 
     private val vpnRequestLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -41,6 +44,12 @@ class MainActivity : ComponentActivity() {
         secureKeyManager = SecureKeyManager()
         blocklistLoader = BlocklistLoader(this)
         accountabilityManager = AccountabilityManager(prefs, secureKeyManager, blocklistLoader)
+        remoteSyncManager = RemoteSyncManager(prefs, accountabilityManager)
+
+        // Start remote sync polling in the background
+        CoroutineScope(Dispatchers.IO).launch {
+            remoteSyncManager.startPolling()
+        }
 
         setContent {
             MaterialTheme {

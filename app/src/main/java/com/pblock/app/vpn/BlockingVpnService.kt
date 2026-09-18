@@ -41,7 +41,9 @@ class BlockingVpnService : VpnService() {
         prefs = PreferencesManager(this)
         blocklistLoader = BlocklistLoader(this)
         filterEngine = FilterEngine().apply {
-            loadBlocklist(blocklistLoader.loadSampleBlocklist())
+            val data = blocklistLoader.loadSampleBlocklist()
+            loadBlocklist(data.domains)
+            loadKeywords(data.keywords)
         }
         createNotificationChannel()
     }
@@ -131,7 +133,10 @@ class BlockingVpnService : VpnService() {
     ) {
         val hostname = extractDnsQueryName(dnsPayload) ?: return
         
-        if (filterEngine.shouldBlock(hostname)) {
+        val isBlocked = filterEngine.shouldBlock(hostname)
+        prefs.incrementQueries(isBlocked)
+        
+        if (isBlocked) {
             blocklistLoader.logEvent("Blocked: $hostname")
             // Send NXDOMAIN
             val response = buildNxDomainResponse(dnsPayload)

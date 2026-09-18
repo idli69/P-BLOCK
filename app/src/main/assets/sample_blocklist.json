@@ -1,12 +1,20 @@
-[
-  "pornhub.com",
-  "xvideos.com",
-  "xnxx.com",
-  "xhamster.com",
-  "eporner.com",
-  "redtube.com",
-  "youporn.com",
-  "tube8.com",
-  "spankbang.com",
-  "rule34.xxx"
-]
+{
+  "domains": [
+    "pornhub.com",
+    "xvideos.com",
+    "xnxx.com",
+    "xhamster.com",
+    "eporner.com",
+    "redtube.com",
+    "youporn.com",
+    "tube8.com",
+    "spankbang.com",
+    "rule34.xxx"
+  ],
+  "keywords": [
+    "porn",
+    "xxx",
+    "nsfw",
+    "adult"
+  ]
+}

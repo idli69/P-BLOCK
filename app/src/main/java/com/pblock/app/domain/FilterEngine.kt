@@ -3,10 +3,16 @@ package com.pblock.app.domain
 class FilterEngine {
     private val blocklist = mutableSetOf<String>()
     private val allowlist = mutableSetOf<String>()
+    private val keywords = mutableSetOf<String>()
 
     fun loadBlocklist(domains: List<String>) {
         blocklist.clear()
         blocklist.addAll(domains.map { it.lowercase() })
+    }
+    
+    fun loadKeywords(kws: List<String>) {
+        keywords.clear()
+        keywords.addAll(kws.map { it.lowercase() })
     }
 
     fun loadAllowlist(domains: List<String>) {
@@ -31,8 +37,13 @@ class FilterEngine {
         if (blocklist.any { query == it || query.endsWith(".$it") }) {
             return true
         }
+        
+        // 3. Check Keywords (substring match)
+        if (keywords.any { query.contains(it) }) {
+            return true
+        }
 
-        // 3. Default allow
+        // 4. Default allow
         return false
     }
 }
