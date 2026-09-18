@@ -9,10 +9,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.Modifier
 import com.pblock.app.accountability.AccountabilityManager
+import com.pblock.app.accountability.RemoteSyncManager
 import com.pblock.app.data.BlocklistLoader
 import com.pblock.app.data.PreferencesManager
 import com.pblock.app.data.SecureKeyManager
@@ -22,8 +23,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-import com.pblock.app.accountability.RemoteSyncManager
-
 class MainActivity : ComponentActivity() {
 
     private lateinit var prefs: PreferencesManager
@@ -32,7 +31,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var accountabilityManager: AccountabilityManager
     private lateinit var remoteSyncManager: RemoteSyncManager
 
-    private val vpnRequestLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+    private val vpnRequestLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             startVpnService()
         }
@@ -40,17 +41,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         prefs = PreferencesManager(this)
         secureKeyManager = SecureKeyManager()
         blocklistLoader = BlocklistLoader(this)
         accountabilityManager = AccountabilityManager(prefs, secureKeyManager, blocklistLoader)
         remoteSyncManager = RemoteSyncManager(prefs, accountabilityManager)
 
-        // Start remote sync polling in the background
-        CoroutineScope(Dispatchers.IO).launch {
-            remoteSyncManager.startPolling()
-        }
+        // Start Firebase listener immediately — it will attach as soon as a topicId exists
+        remoteSyncManager.start()
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
@@ -83,12 +82,10 @@ class MainActivity : ComponentActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             prefs.setProtected(true)
         }
-        val intent = Intent(this, BlockingVpnService::class.java)
-        startForegroundService(intent)
+        startForegroundService(Intent(this, BlockingVpnService::class.java))
     }
 
     private fun stopVpnService() {
-        val intent = Intent(this, BlockingVpnService::class.java)
-        stopService(intent)
+        stopService(Intent(this, BlockingVpnService::class.java))
     }
 }

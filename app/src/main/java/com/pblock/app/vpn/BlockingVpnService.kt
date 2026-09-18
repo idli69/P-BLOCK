@@ -4,7 +4,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
@@ -31,31 +30,41 @@ class BlockingVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
-    
+
     private lateinit var prefs: PreferencesManager
     private lateinit var filterEngine: FilterEngine
     private lateinit var blocklistLoader: BlocklistLoader
-    
-    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
         prefs = PreferencesManager(this)
         blocklistLoader = BlocklistLoader(this)
-        filterEngine = FilterEngine().apply {
-            val data = blocklistLoader.loadSampleBlocklist()
-            loadBlocklist(data.domains)
-            loadKeywords(data.keywords)
+        filterEngine = FilterEngine()
+
+        // Load sample blocklist immediately so the VPN works right away
+        blocklistLoader.loadSampleBlocklist().also {
+            filterEngine.loadBlocklist(it.domains)
+            filterEngine.loadKeywords(it.keywords)
         }
-        
-        // Fetch massive blocklist via OTA in background
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            val otaDomains = blocklistLoader.downloadOisdBlocklist()
-            if (otaDomains.isNotEmpty()) {
-                filterEngine.loadBlocklist(otaDomains) // Overwrites sample list with 100k+ real domains
+
+        // Try loading cached OTA list synchronously (file read — fast, no network)
+        val cached = blocklistLoader.loadCachedBlocklist()
+        if (cached.isNotEmpty()) {
+            filterEngine.loadBlocklist(cached)
+            Log.i(TAG, "Loaded ${cached.size} domains from cache immediately")
+        }
+
+        // Schedule download refresh in background if cache was empty or stale
+        if (cached.isEmpty()) {
+            serviceScope.launch {
+                val otaDomains = blocklistLoader.downloadOisdBlocklist()
+                if (otaDomains.isNotEmpty()) {
+                    filterEngine.loadBlocklist(otaDomains)
+                    Log.i(TAG, "Hot-swapped blocklist with ${otaDomains.size} OTA domains")
+                }
             }
         }
-        
+
         createNotificationChannel()
     }
 
@@ -148,10 +157,7 @@ class BlockingVpnService : VpnService() {
         prefs.incrementQueries(isBlocked)
         
         if (isBlocked) {
-            blocklistLoader.logEvent("Blocked: $hostname")
-            mainHandler.post {
-                android.widget.Toast.makeText(this@BlockingVpnService, "Shield Active: Blocked $hostname", android.widget.Toast.LENGTH_SHORT).show()
-            }
+            Log.d(TAG, "Blocked: $hostname")
             // Send NXDOMAIN
             val response = buildNxDomainResponse(dnsPayload)
             sendUdpResponse(response, srcIp, destIp, srcPort, destPort, out)

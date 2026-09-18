@@ -57,7 +57,8 @@ fun NavGraph(
         composable("settings") {
             SettingsScreen(
                 prefs = prefs,
-                blocklistLoader = blocklistLoader
+                blocklistLoader = blocklistLoader,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }

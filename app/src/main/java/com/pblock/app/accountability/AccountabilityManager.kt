@@ -4,38 +4,61 @@ import com.pblock.app.data.PreferencesManager
 import com.pblock.app.data.SecureKeyManager
 import kotlinx.coroutines.flow.first
 import com.pblock.app.data.BlocklistLoader
+import kotlin.math.abs
 
 class AccountabilityManager(
     private val prefs: PreferencesManager,
     private val secureKeyManager: SecureKeyManager,
     private val blocklistLoader: BlocklistLoader
 ) {
-    suspend fun generateAndSetPartnerCode(code: String) {
-        val encrypted = secureKeyManager.encryptPartnerCode(code)
-        prefs.setPartnerCode(encrypted)
-        prefs.setProtected(true)
-        blocklistLoader.logEvent("Protection enabled with partner code")
+    /**
+     * Derives a stable Firebase topic ID from the plain-text partner code.
+     * Must be done BEFORE encryption so both devices compute the same value.
+     */
+    fun deriveTopicId(plainCode: String): String {
+        return "pblock_${abs(plainCode.hashCode())}"
     }
 
+    suspend fun generateAndSetPartnerCode(code: String) {
+        val encrypted = secureKeyManager.encryptPartnerCode(code)
+        val topicId = deriveTopicId(code)
+        prefs.setPartnerCode(encrypted, topicId)  // stores both encrypted code AND stable topicId
+        prefs.setProtected(true)
+        blocklistLoader.logEvent("Protection enabled with partner code. Topic: $topicId")
+    }
+
+    /**
+     * Verifies partner code and unlocks. This is a user-initiated unlock
+     * so it RESETS the streak (resetStreak = true).
+     */
     suspend fun verifyAndUnlock(inputCode: String): Boolean {
-        val encryptedCode = prefs.partnerCodeEncrypted.first()
-        if (encryptedCode == null) return false
-        
+        val encryptedCode = prefs.partnerCodeEncrypted.first() ?: return false
+
         if (secureKeyManager.verifyPartnerCode(encryptedCode, inputCode)) {
-            prefs.setProtected(false)
+            prefs.setProtected(false, resetStreak = true)
             prefs.clearEmergencyUnlock()
-            blocklistLoader.logEvent("Protection unlocked successfully using partner code")
+            blocklistLoader.logEvent("Protection unlocked via partner code")
             return true
         }
-        blocklistLoader.logEvent("Failed unlock attempt with partner code")
+        blocklistLoader.logEvent("Failed unlock attempt")
         return false
+    }
+
+    /**
+     * Firebase-triggered remote unlock — does NOT reset the streak
+     * because the partner is granting access, not the user giving up.
+     */
+    suspend fun remoteUnlock() {
+        prefs.setProtected(false, resetStreak = false)
+        prefs.clearEmergencyUnlock()
+        blocklistLoader.logEvent("Protection disabled via remote Firebase unlock")
     }
 
     suspend fun requestEmergencyUnlock() {
         val currentStart = prefs.emergencyUnlockStart.first()
         if (currentStart == 0L) {
             prefs.startEmergencyUnlock(System.currentTimeMillis())
-            blocklistLoader.logEvent("Emergency unlock requested")
+            blocklistLoader.logEvent("Emergency unlock cooldown started")
         }
     }
 
@@ -46,14 +69,15 @@ class AccountabilityManager(
         val duration = prefs.cooldownDuration.first()
         val elapsed = System.currentTimeMillis() - startTime
         if (elapsed >= duration) {
-            prefs.setProtected(false)
+            // Emergency cooldown expired — this IS a user-initiated "give up" so streak resets
+            prefs.setProtected(false, resetStreak = true)
             prefs.clearEmergencyUnlock()
-            blocklistLoader.logEvent("Emergency unlock cooldown expired, protection disabled")
+            blocklistLoader.logEvent("Emergency unlock cooldown expired — protection disabled")
             return true
         }
         return false
     }
-    
+
     suspend fun getRemainingCooldownMs(): Long {
         val startTime = prefs.emergencyUnlockStart.first()
         if (startTime == 0L) return 0L
