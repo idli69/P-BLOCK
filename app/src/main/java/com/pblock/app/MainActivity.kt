@@ -13,10 +13,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.Modifier
 import com.pblock.app.accountability.AccountabilityManager
+import com.pblock.app.accountability.AuthManager
 import com.pblock.app.accountability.RemoteSyncManager
 import com.pblock.app.data.BlocklistLoader
 import com.pblock.app.data.PreferencesManager
 import com.pblock.app.data.SecureKeyManager
+import com.pblock.app.state.AppStateController
+import com.pblock.app.state.StateEvent
 import com.pblock.app.ui.NavGraph
 import com.pblock.app.vpn.BlockingVpnService
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +32,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var secureKeyManager: SecureKeyManager
     private lateinit var blocklistLoader: BlocklistLoader
     private lateinit var accountabilityManager: AccountabilityManager
+    private lateinit var authManager: AuthManager
     private lateinit var remoteSyncManager: RemoteSyncManager
+    private lateinit var appStateController: AppStateController
 
     private val vpnRequestLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -46,9 +51,20 @@ class MainActivity : ComponentActivity() {
         secureKeyManager = SecureKeyManager()
         blocklistLoader = BlocklistLoader(this)
         accountabilityManager = AccountabilityManager(prefs, secureKeyManager, blocklistLoader)
-        remoteSyncManager = RemoteSyncManager(this, prefs, accountabilityManager)
+        authManager = AuthManager()
+        appStateController = AppStateController(
+            prefs, authManager,
+            onStateChanged = { state -> remoteSyncManager.publishState(state) }
+        )
+        remoteSyncManager = RemoteSyncManager(
+            this, prefs, accountabilityManager, authManager,
+            onLock = { appStateController.applyEvent(com.pblock.app.state.StateEvent.PartnerLock) },
+            onUnlock = { appStateController.applyEvent(com.pblock.app.state.StateEvent.PartnerUnlock) }
+        )
 
-        // Start Firebase listener immediately — it will attach as soon as a topicId exists
+        // Start Firebase identity + sync immediately
+        authManager.start()
+        appStateController.start()
         remoteSyncManager.start()
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -65,6 +81,7 @@ class MainActivity : ComponentActivity() {
                         prefs = prefs,
                         accountabilityManager = accountabilityManager,
                         blocklistLoader = blocklistLoader,
+                        appStateController = appStateController,
                         onStartVpn = { requestVpnPermission() },
                         onStopVpn = { stopVpnService() }
                     )

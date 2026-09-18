@@ -9,18 +9,21 @@ import androidx.navigation.compose.rememberNavController
 import com.pblock.app.accountability.AccountabilityManager
 import com.pblock.app.data.BlocklistLoader
 import com.pblock.app.data.PreferencesManager
+import com.pblock.app.state.AppStateController
 
 @Composable
 fun NavGraph(
     prefs: PreferencesManager,
     accountabilityManager: AccountabilityManager,
     blocklistLoader: BlocklistLoader,
+    appStateController: AppStateController,
     onStartVpn: () -> Unit,
     onStopVpn: () -> Unit
 ) {
     val navController = rememberNavController()
     val isProtected by prefs.isProtected.collectAsState(initial = false)
     val partnerCode by prefs.partnerCodeEncrypted.collectAsState(initial = null)
+    val appState by appStateController.state.collectAsState()
 
     val startDestination = if (partnerCode == null) "onboarding" else "dashboard"
 
@@ -40,6 +43,7 @@ fun NavGraph(
             Dashboard(
                 isProtected = isProtected,
                 prefs = prefs,
+                appState = appState,
                 onNavigateToUnlock = { navController.navigate("unlock") },
                 onNavigateToSettings = { navController.navigate("settings") },
                 onStartVpn = onStartVpn

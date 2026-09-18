@@ -23,6 +23,7 @@ import android.content.ComponentName
 import android.content.Intent
 import com.pblock.app.admin.AdminReceiver
 import com.pblock.app.data.PreferencesManager
+import com.pblock.app.state.PBlockState
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,6 +31,7 @@ import kotlinx.coroutines.delay
 fun Dashboard(
     prefs: PreferencesManager,
     isProtected: Boolean,
+    appState: PBlockState,
     onNavigateToUnlock: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onStartVpn: () -> Unit
@@ -90,6 +92,26 @@ fun Dashboard(
                 .padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Persisted state machine chip
+            val stateTint = when (appState) {
+                PBlockState.ACTIVE -> Color(0xFF4CAF50)
+                PBlockState.DEGRADED -> Color(0xFFFF9800)
+                PBlockState.PARTNER_LOCKED, PBlockState.COOLDOWN_PENDING -> Color(0xFFE53935)
+                PBlockState.SETUP_INCOMPLETE, PBlockState.DISCONNECTED -> Color(0xFFB0BEC5)
+            }
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = stateTint.copy(alpha = 0.18f)
+            ) {
+                Text(
+                    text = appState.name.replace("_", " "),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = stateTint
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
             if (isProtected) {
                 // Shield icon with pulsing animation
                 Icon(

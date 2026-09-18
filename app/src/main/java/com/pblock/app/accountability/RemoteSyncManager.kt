@@ -11,6 +11,7 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.ktx.database
+import com.google.firebase.database.ktx.getValue
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.ktx.messaging
 import com.pblock.app.MainActivity
@@ -23,53 +24,67 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 /**
- * RemoteSyncManager: Full Firebase integration.
+ * RemoteSyncManager: auth'd Firebase integration.
  *
- * 1. Uploads this device's FCM token so the partner web dashboard can
- *    send direct push notifications.
- * 2. Writes a heartbeat timestamp every 5 minutes (liveness monitor).
- * 3. Syncs live blocked-query count for partner dashboard.
- * 4. Listens for UNLOCK / LOCK commands from the partner.
- * 5. Shows a local notification to the user when partner remotely unlocks.
+ * All device data lives under `devices/{anonymousUid}/...`, matching the
+ * deny-by-default database rules:
+ *   1. Pushes this device's FCM token (partner dashboard push target).
+ *   2. Heartbeat every 5 minutes (liveness monitor).
+ *   3. Syncs live state + blocked-query counters.
+ *   4. Listens for LOCK / UNLOCK commands under `commands/` from the partner.
+ *   5. Applies remote lock/unlock and shows a local notification.
  */
 class RemoteSyncManager(
     private val context: Context,
     private val prefs: PreferencesManager,
-    private val accountabilityManager: AccountabilityManager
+    private val accountabilityManager: AccountabilityManager,
+    private val authManager: AuthManager,
+    private val onLock: suspend () -> Unit,
+    private val onUnlock: suspend () -> Unit
 ) {
     private val TAG = "RemoteSyncManager"
     private val DB_URL = "https://p-block-69-default-rtdb.firebaseio.com"
     private val CHANNEL_ID = "pblock_alerts"
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     fun start() {
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             setupFirebase()
         }
     }
 
-    private suspend fun setupFirebase() {
-        val topicId = prefs.partnerTopicId.first()
-        if (topicId == null) {
-            Log.w(TAG, "No topic ID yet — will not connect to Firebase")
-            return
+    /** Mirror the persisted app state to this device's RTDB node. */
+    suspend fun publishState(state: PBlockState) {
+        val uid = authManager.deviceUid.value ?: return
+        try {
+            Firebase.database(DB_URL)
+                .getReference("devices/$uid/state")
+                .setValue(state.name)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to publish state", e)
         }
+    }
+
+    private suspend fun setupFirebase() {
+        val uid = authManager.deviceUid.first { it != null } ?: return
+        if (authManager.auth.currentUser == null) return
 
         val db = Firebase.database(DB_URL)
-        val statusRef  = db.getReference("users/$topicId/status")
-        val activeRef  = db.getReference("users/$topicId/last_active")
-        val blockedRef = db.getReference("users/$topicId/blocked_count")
-        val tokenRef   = db.getReference("users/$topicId/device_token")
+        val deviceRoot = db.getReference("devices/$uid")
+        val activeRef  = deviceRoot.child("last_active")
+        val blockedRef = deviceRoot.child("blocked_count")
+        val tokenRef   = deviceRoot.child("fcm_token")
 
-        val topAllowedRef = db.getReference("users/$topicId/top_allowed")
-        val topBlockedRef = db.getReference("users/$topicId/top_blocked")
-        val customBlocksRef = db.getReference("users/$topicId/custom_blocks")
-        
-        val usageRef = db.getReference("users/$topicId/daily_usage")
-        val pickupsRef = db.getReference("users/$topicId/daily_pickups")
+        val topAllowedRef = deviceRoot.child("top_allowed")
+        val topBlockedRef = deviceRoot.child("top_blocked")
+        val customBlocksRef = deviceRoot.child("custom_blocks")
+        val usageRef = deviceRoot.child("daily_usage")
+        val pickupsRef = deviceRoot.child("daily_pickups")
+        val commandsRef = deviceRoot.child("commands")
 
-        Log.i(TAG, "Firebase connected at users/$topicId")
+        Log.i(TAG, "Firebase connected at devices/$uid")
 
-        // 1. Upload FCM push token so partner dashboard can notify this device
+        // 1. Upload FCM push token so the partner dashboard can notify this device
         try {
             val token = Firebase.messaging.token.await()
             tokenRef.setValue(token)
@@ -77,18 +92,18 @@ class RemoteSyncManager(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to upload FCM token", e)
         }
-        
+
         val usageTracker = com.pblock.app.domain.UsageTracker(context)
 
         // 2. Heartbeat loop — runs forever while the app is alive
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             while (true) {
                 try {
                     activeRef.setValue(System.currentTimeMillis())
                     blockedRef.setValue(prefs.blockedQueries.first())
                     topAllowedRef.setValue(com.pblock.app.domain.StatsTracker.getTopAllowed())
                     topBlockedRef.setValue(com.pblock.app.domain.StatsTracker.getTopBlocked())
-                    
+
                     // Analytics
                     pickupsRef.setValue(prefs.dailyPickups.first())
                     try {
@@ -103,35 +118,20 @@ class RemoteSyncManager(
             }
         }
 
-        // 3. Listen for remote commands from partner
-        statusRef.addValueEventListener(object : ValueEventListener {
+        // 3. Listen for partner commands (LOCK / UNLOCK). Full command lifecycle
+        //    (PENDING -> DELIVERED -> ACKNOWLEDGED) arrives in Phase 4.
+        commandsRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val status = snapshot.getValue(String::class.java) ?: return
-                Log.d(TAG, "Status update from Firebase: $status")
-                when (status) {
-                    "UNLOCK" -> {
-                        Log.i(TAG, "Remote UNLOCK received!")
-                        CoroutineScope(Dispatchers.IO).launch {
-                            accountabilityManager.remoteUnlock()
-                            statusRef.setValue("LOCKED") // reset so it doesn't fire again
-                            showLocalNotification(
-                                title = "Protection Disabled",
-                                body = "Your accountability partner has unlocked P-BLOCK."
-                            )
-                        }
-                    }
-                    "EMERGENCY_ACK" -> {
-                        // Partner acknowledged the emergency unlock request notification
-                        showLocalNotification(
-                            title = "Partner Notified",
-                            body = "Your partner has seen your emergency unlock request."
-                        )
+                val commands = snapshot.getValue<Map<String, Any>>() ?: return
+                for ((commandId, value) in commands) {
+                    scope.launch {
+                        handleCommand(commandId, value, commandsRef)
                     }
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Firebase listener cancelled: ${error.message}")
+                Log.e(TAG, "Commands listener cancelled", error.toException())
             }
         })
 
@@ -156,18 +156,52 @@ class RemoteSyncManager(
         })
     }
 
+    private suspend fun handleCommand(
+        commandId: String,
+        value: Any,
+        commandsRef: com.google.firebase.database.DatabaseReference
+    ) {
+        val command = (value as? Map<*, *>)?.get("type")?.toString() ?: value.toString()
+        Log.d(TAG, "Command $commandId -> $command")
+        when (command) {
+            "UNLOCK" -> {
+                accountabilityManager.remoteUnlock()
+                onUnlock()
+                commandsRef.child(commandId).removeValue()
+                showLocalNotification(
+                    title = "Protection Disabled",
+                    body = "Your accountability partner has unlocked P-BLOCK."
+                )
+            }
+            "LOCK" -> {
+                accountabilityManager.remoteLock()
+                onLock()
+                commandsRef.child(commandId).removeValue()
+                showLocalNotification(
+                    title = "Protection Locked",
+                    body = "Your accountability partner has locked P-BLOCK."
+                )
+            }
+        }
+    }
+
     /**
      * Called when the user taps "Emergency Unlock". Writes a flag to Firebase
-     * so the partner web dashboard shows a badge + sends a push to the partner.
-     * (The web dashboard reads this flag and uses the stored FCM token to push notify.)
+     * so the partner web dashboard shows a badge. (Push to the partner is
+     * dashboard-open-only by design and is a backlog item for a Blaze-triggered
+     * Cloud Function.)
      */
     fun notifyPartnerEmergencyRequest() {
-        CoroutineScope(Dispatchers.IO).launch {
-            val topicId = prefs.partnerTopicId.first() ?: return@launch
-            Firebase.database(DB_URL)
-                .getReference("users/$topicId/emergency_request")
-                .setValue(System.currentTimeMillis())
-            Log.i(TAG, "Emergency unlock request written to Firebase")
+        scope.launch {
+            val uid = authManager.deviceUid.value ?: return@launch
+            try {
+                Firebase.database(DB_URL)
+                    .getReference("devices/$uid/emergency_request")
+                    .setValue(System.currentTimeMillis())
+                Log.i(TAG, "Emergency unlock request written to Firebase")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to write emergency request", e)
+            }
         }
     }
 
