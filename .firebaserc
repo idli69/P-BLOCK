@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "p-block-69"
-  }
+    "default": "p-block-69",
+    "pblock": "p-block-69"
+  },
+  "targets": {},
+  "etags": {}
 }

@@ -5,11 +5,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -19,6 +22,8 @@ import kotlinx.coroutines.tasks.await
  */
 class AuthManager {
     val auth: FirebaseAuth = Firebase.auth
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _deviceUid = MutableStateFlow<String?>(auth.currentUser?.uid)
     val deviceUid: StateFlow<String?> = _deviceUid.asStateFlow()
@@ -32,7 +37,7 @@ class AuthManager {
             }
         }
         // Kick off a sign-in immediately if none exists.
-        ensureSignedIn()
+        scope.launch { ensureSignedIn() }
     }
 
     /**
